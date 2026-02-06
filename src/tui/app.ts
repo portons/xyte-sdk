@@ -178,6 +178,7 @@ export async function runTuiApp(options: TuiAppOptions): Promise<void> {
     let footerStatusText = 'Ready';
     let getInputState = () => ({ queueDepth: 0, droppedEvents: 0, inFlight: false });
     let lastRuntimeLogLine = '';
+    let lastRenderCounter = 0;
     let isHandlingFatalError = false;
     let errorStormState: ErrorStormState = {
       message: '',
@@ -790,6 +791,15 @@ export async function runTuiApp(options: TuiAppOptions): Promise<void> {
           result: dispatchResult,
           queueDepth: getInputState().queueDepth,
           droppedEvents: getInputState().droppedEvents
+        });
+        const renderCount = Number((screen as unknown as { renders?: number }).renders ?? 0);
+        const renderDelta = Math.max(0, renderCount - lastRenderCounter);
+        lastRenderCounter = renderCount;
+        logger.log('nav.render.count', {
+          screen: activeMounted?.id,
+          key: event.key.name ?? event.key.full,
+          renderCount,
+          delta: renderDelta
         });
         renderFooter();
       },

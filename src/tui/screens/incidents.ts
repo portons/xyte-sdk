@@ -195,7 +195,7 @@ export function createIncidentsScreen(): TuiScreen {
         height: '100%',
         border: 'line',
         label: ' Incidents ',
-        keys: true,
+        keys: false,
         mouse: true,
         data: [['ID', 'Severity', 'State', 'Device']],
         style: {
@@ -214,7 +214,7 @@ export function createIncidentsScreen(): TuiScreen {
         label: ' Incident Detail ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true
       });
@@ -231,9 +231,13 @@ export function createIncidentsScreen(): TuiScreen {
         scrollable: true,
         alwaysScroll: true,
         vi: true,
-        keys: true,
+        keys: false,
         mouse: true,
         content: 'Select an incident and press x to run triage.'
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'incidents',
+        widgets: ['incidents-table', 'detail-box', 'triage-box']
       });
 
       list.on('select item', (_item, index) => {
@@ -310,12 +314,20 @@ export function createIncidentsScreen(): TuiScreen {
       }
 
       if (activePane === 'incidents-table') {
+        const beforeIndex = selectedIndex;
         selectedIndex = moveTableSelection({
           table: list,
           index: selectedIndex,
           delta,
           totalRows: filtered.length,
           selectionSync
+        });
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'incidents',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedIndex,
+          delta
         });
         renderRows();
         context.screen.render();

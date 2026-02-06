@@ -64,7 +64,7 @@ export function createDashboardScreen(): TuiScreen {
         height: 5,
         border: 'line',
         label: ' KPI ',
-        keys: true,
+        keys: false,
         mouse: true
       });
 
@@ -76,7 +76,7 @@ export function createDashboardScreen(): TuiScreen {
         height: 4,
         border: 'line',
         label: ' Provider Status ',
-        keys: true,
+        keys: false,
         mouse: true
       });
 
@@ -90,7 +90,7 @@ export function createDashboardScreen(): TuiScreen {
         label: ' Recent Incidents ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true
       });
@@ -105,9 +105,13 @@ export function createDashboardScreen(): TuiScreen {
         label: ' Recent Tickets ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'dashboard',
+        widgets: ['kpi', 'provider', 'incidents', 'tickets']
       });
     },
     unmount() {

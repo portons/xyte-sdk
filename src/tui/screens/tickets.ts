@@ -261,7 +261,7 @@ export function createTicketsScreen(): TuiScreen {
         height: '100%',
         border: 'line',
         label: ' Tickets ',
-        keys: true,
+        keys: false,
         mouse: true,
         data: [['ID', 'Status', 'Priority', 'Subject']],
         style: {
@@ -280,7 +280,7 @@ export function createTicketsScreen(): TuiScreen {
         label: ' Ticket Detail ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true,
         content: 'Select a ticket.'
@@ -297,10 +297,14 @@ export function createTicketsScreen(): TuiScreen {
         tags: true,
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true,
         content: 'Press m to draft ticket response.'
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'tickets',
+        widgets: ['tickets-table', 'detail-box', 'draft-box']
       });
 
       list.on('select item', (_item, index) => {
@@ -385,12 +389,20 @@ export function createTicketsScreen(): TuiScreen {
       }
 
       if (activePane === 'tickets-table') {
+        const beforeIndex = selectedIndex;
         selectedIndex = moveTableSelection({
           table: list,
           index: selectedIndex,
           delta,
           totalRows: filtered.length,
           selectionSync
+        });
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'tickets',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedIndex,
+          delta
         });
         queueTicketDetailFetch(selectedIndex);
         return 'handled';

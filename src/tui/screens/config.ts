@@ -2,7 +2,15 @@ import blessed from 'blessed';
 
 import { makeKeyFingerprint, matchesSlotRef } from '../../secure/key-slots';
 import type { SecretProvider } from '../../types/profile';
-import { clampIndex, movePaneWithBoundary, moveTableSelection, scrollBox } from '../navigation';
+import {
+  clampIndex,
+  movePaneWithBoundary,
+  moveTableSelection,
+  scrollBox,
+  setListTableData,
+  syncListSelection,
+  type SelectionSyncState
+} from '../navigation';
 import { SCREEN_PANE_CONFIG } from '../panes';
 import { sceneFromConfigState } from '../scene';
 import type { TuiArrowKey, TuiContext, TuiScreen } from '../types';
@@ -26,6 +34,14 @@ export function createConfigScreen(): TuiScreen {
   let doctorStatus = 'not run';
   let selectedTenantIndex = 0;
   let selectedSlotIndex = 0;
+  let tenantSelectionSync: SelectionSyncState = {
+    syncing: false,
+    name: 'config-tenants'
+  };
+  let slotSelectionSync: SelectionSyncState = {
+    syncing: false,
+    name: 'config-slots'
+  };
   const paneConfig = SCREEN_PANE_CONFIG.config;
   let activePane = paneConfig.defaultPane;
   let isMounted = false;
@@ -89,13 +105,13 @@ export function createConfigScreen(): TuiScreen {
     const slotPanel = panels.find((panel) => panel.id === 'config-slots');
     const actionPanel = panels.find((panel) => panel.id === 'config-actions');
 
-    tenantTable?.setData([
+    setListTableData(tenantTable, [
       (tenantPanel?.table?.columns ?? ['ID', 'Name', 'Active']) as [string, string, string],
       ...((tenantPanel?.table?.rows ?? []) as Array<[string, string, string]>)
-    ]);
+    ], tenantSelectionSync);
     selectedTenantIndex = clampIndex(selectedTenantIndex, data.tenants.length);
-    tenantTable?.select(selectedTenantIndex + 1);
-    slotTable?.setData([
+    syncListSelection(tenantTable, selectedTenantIndex, tenantSelectionSync);
+    setListTableData(slotTable, [
       (slotPanel?.table?.columns ?? ['Provider', 'Slot', 'Name', 'Active', 'Has Secret', 'Fingerprint']) as [
         string,
         string,
@@ -105,9 +121,9 @@ export function createConfigScreen(): TuiScreen {
         string
       ],
       ...((slotPanel?.table?.rows ?? []) as Array<[string, string, string, string, string, string]>)
-    ]);
+    ], slotSelectionSync);
     selectedSlotIndex = clampIndex(selectedSlotIndex, slotsWithSecret.length);
-    slotTable?.select(selectedSlotIndex + 1);
+    syncListSelection(slotTable, selectedSlotIndex, slotSelectionSync);
     actionBox?.setContent((actionPanel?.text?.lines ?? []).join('\n'));
     focusPane();
     context.screen.render();
@@ -118,6 +134,16 @@ export function createConfigScreen(): TuiScreen {
     title: 'Config',
     mount(parent, ctx) {
       context = ctx;
+      tenantSelectionSync = {
+        syncing: false,
+        name: 'config-tenants',
+        onLog: (event, data) => context.debugLog?.(event, data)
+      };
+      slotSelectionSync = {
+        syncing: false,
+        name: 'config-slots',
+        onLog: (event, data) => context.debugLog?.(event, data)
+      };
       isMounted = true;
       root = blessed.box({
         parent,
@@ -133,7 +159,7 @@ export function createConfigScreen(): TuiScreen {
         height: '65%',
         border: 'line',
         label: ' Tenants ',
-        keys: true,
+        keys: false,
         mouse: true,
         style: {
           header: { bold: true, fg: 'black', bg: 'white' },
@@ -150,7 +176,7 @@ export function createConfigScreen(): TuiScreen {
         height: '65%',
         border: 'line',
         label: ' Key Slots ',
-        keys: true,
+        keys: false,
         mouse: true,
         style: {
           header: { bold: true, fg: 'black', bg: 'white' },
@@ -169,9 +195,13 @@ export function createConfigScreen(): TuiScreen {
         label: ' Actions ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'config',
+        widgets: ['tenants-table', 'slots-table', 'actions-box']
       });
     },
     unmount() {
@@ -210,11 +240,20 @@ export function createConfigScreen(): TuiScreen {
 
       if (activePane === 'tenants-table') {
         const data = await context.profileStore.getData();
+        const beforeIndex = selectedTenantIndex;
         selectedTenantIndex = moveTableSelection({
           table: tenantTable,
           index: selectedTenantIndex,
           delta,
-          totalRows: data.tenants.length
+          totalRows: data.tenants.length,
+          selectionSync: tenantSelectionSync
+        });
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'config',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedTenantIndex,
+          delta
         });
         context.screen.render();
         return 'handled';
@@ -223,11 +262,20 @@ export function createConfigScreen(): TuiScreen {
       if (activePane === 'slots-table') {
         const tenantId = await context.getActiveTenantId();
         const slotCount = tenantId ? (await context.profileStore.listKeySlots(tenantId)).length : 0;
+        const beforeIndex = selectedSlotIndex;
         selectedSlotIndex = moveTableSelection({
           table: slotTable,
           index: selectedSlotIndex,
           delta,
-          totalRows: slotCount
+          totalRows: slotCount,
+          selectionSync: slotSelectionSync
+        });
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'config',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedSlotIndex,
+          delta
         });
         context.screen.render();
         return 'handled';

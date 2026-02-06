@@ -91,7 +91,7 @@ export function createCopilotScreen(): TuiScreen {
         height: 4,
         border: 'line',
         label: ' Provider ',
-        keys: true,
+        keys: false,
         mouse: true
       });
 
@@ -106,11 +106,15 @@ export function createCopilotScreen(): TuiScreen {
         tags: true,
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true,
         content:
           'Use Enter for free-form prompt, h for fleet health summary, s for command suggestions. Outputs are advisory only.'
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'copilot',
+        widgets: ['provider-box', 'output-box']
       });
     },
     unmount() {

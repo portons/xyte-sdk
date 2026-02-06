@@ -61,6 +61,7 @@ export function createSpacesScreen(): TuiScreen {
   let loading = false;
   let spinnerPhase = 0;
   let spinnerTimer: NodeJS.Timeout | undefined;
+  let selectionDebounceTimer: NodeJS.Timeout | undefined;
   let allDevicesCache: any[] = [];
   let activeTenantId: string | undefined;
   let spaceSelectionSync: SelectionSyncState = {
@@ -87,6 +88,13 @@ export function createSpacesScreen(): TuiScreen {
     if (spinnerTimer) {
       clearInterval(spinnerTimer);
       spinnerTimer = undefined;
+    }
+  };
+
+  const clearSelectionDebounce = () => {
+    if (selectionDebounceTimer) {
+      clearTimeout(selectionDebounceTimer);
+      selectionDebounceTimer = undefined;
     }
   };
 
@@ -208,6 +216,14 @@ export function createSpacesScreen(): TuiScreen {
     }
   };
 
+  const scheduleSelectionLoad = (index: number) => {
+    clearSelectionDebounce();
+    selectionDebounceTimer = setTimeout(() => {
+      selectionDebounceTimer = undefined;
+      void loadSelection(index);
+    }, 120);
+  };
+
   const applyFilter = () => {
     if (!searchText) {
       filtered = spaces;
@@ -270,7 +286,7 @@ export function createSpacesScreen(): TuiScreen {
         height: '100%-1',
         border: 'line',
         label: ' Spaces ',
-        keys: true,
+        keys: false,
         mouse: true,
         data: [['ID', 'Name', 'Type', 'Path']],
         style: {
@@ -289,7 +305,7 @@ export function createSpacesScreen(): TuiScreen {
         label: ' Space Detail ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true,
         content: 'Select a space to load details.'
@@ -303,13 +319,17 @@ export function createSpacesScreen(): TuiScreen {
         height: '100%-1',
         border: 'line',
         label: ' Devices In Space ',
-        keys: true,
+        keys: false,
         mouse: true,
         data: [['ID', 'Name', 'Status']],
         style: {
           header: { bold: true, fg: 'black', bg: 'white' },
           cell: { selected: { bg: 'blue' } }
         }
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'spaces',
+        widgets: ['spaces-table', 'detail-box', 'devices-table']
       });
 
       statusBox = blessed.box({
@@ -329,12 +349,14 @@ export function createSpacesScreen(): TuiScreen {
         if (shouldIgnoreSelectEvent(spaceSelectionSync)) {
           return;
         }
+        clearSelectionDebounce();
         void loadSelection(Math.max(0, index - 1));
       });
     },
     unmount() {
       isMounted = false;
       stopSpinner();
+      clearSelectionDebounce();
       root?.destroy();
       root = undefined;
     },
@@ -365,6 +387,7 @@ export function createSpacesScreen(): TuiScreen {
       }
 
       if (filtered.length) {
+        clearSelectionDebounce();
         await loadSelection(selectedIndex);
       }
     },
@@ -395,6 +418,7 @@ export function createSpacesScreen(): TuiScreen {
       }
 
       if (activePane === 'spaces-table') {
+        const beforeIndex = selectedIndex;
         selectedIndex = moveTableSelection({
           table: spaceTable,
           index: selectedIndex,
@@ -402,7 +426,14 @@ export function createSpacesScreen(): TuiScreen {
           totalRows: filtered.length,
           selectionSync: spaceSelectionSync
         });
-        void loadSelection(selectedIndex);
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'spaces',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedIndex,
+          delta
+        });
+        scheduleSelectionLoad(selectedIndex);
         return 'handled';
       }
 
@@ -428,6 +459,7 @@ export function createSpacesScreen(): TuiScreen {
           searchText = value.trim();
           applyFilter();
           if (filtered.length) {
+            clearSelectionDebounce();
             await loadSelection(selectedIndex);
           }
         }
@@ -435,6 +467,7 @@ export function createSpacesScreen(): TuiScreen {
       }
 
       if (key.name === 'enter' && activePane === 'spaces-table') {
+        clearSelectionDebounce();
         await loadSelection(selectedIndex);
         return true;
       }

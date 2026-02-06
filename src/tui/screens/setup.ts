@@ -1,6 +1,14 @@
 import blessed from 'blessed';
 
-import { clampIndex, movePaneWithBoundary, moveTableSelection, scrollBox } from '../navigation';
+import {
+  clampIndex,
+  movePaneWithBoundary,
+  moveTableSelection,
+  scrollBox,
+  setListTableData,
+  syncListSelection,
+  type SelectionSyncState
+} from '../navigation';
 import { SCREEN_PANE_CONFIG } from '../panes';
 import type { TuiArrowKey, TuiContext, TuiScreen } from '../types';
 import { makeKeyFingerprint } from '../../secure/key-slots';
@@ -24,6 +32,10 @@ export function createSetupScreen(): TuiScreen {
   let checklistBox: blessed.Widgets.BoxElement | undefined;
   let context: TuiContext;
   let selectedProviderIndex = 0;
+  let providerSelectionSync: SelectionSyncState = {
+    syncing: false,
+    name: 'setup-providers'
+  };
   const paneConfig = SCREEN_PANE_CONFIG.setup;
   let activePane = paneConfig.defaultPane;
   let isMounted = false;
@@ -63,12 +75,12 @@ export function createSetupScreen(): TuiScreen {
     const checklist = panels.find((panel) => panel.id === 'setup-checklist');
 
     statsBox?.setContent((overview?.stats ?? []).map((stat) => `${stat.label}: ${stat.value}`).join('\n'));
-    providerTable?.setData([
+    setListTableData(providerTable, [
       (providers?.table?.columns ?? ['Provider', 'Slots', 'Active Slot', 'Has Secret']) as [string, string, string, string],
       ...((providers?.table?.rows ?? []) as Array<[string, string, string, string]>)
-    ]);
+    ], providerSelectionSync);
     selectedProviderIndex = clampIndex(selectedProviderIndex, readiness.providers.length);
-    providerTable?.select(selectedProviderIndex + 1);
+    syncListSelection(providerTable, selectedProviderIndex, providerSelectionSync);
     checklistBox?.setContent((checklist?.text?.lines ?? []).join('\n'));
     focusPane();
     context.screen.render();
@@ -79,6 +91,11 @@ export function createSetupScreen(): TuiScreen {
     title: 'Setup',
     mount(parent, ctx) {
       context = ctx;
+      providerSelectionSync = {
+        syncing: false,
+        name: 'setup-providers',
+        onLog: (event, data) => context.debugLog?.(event, data)
+      };
       isMounted = true;
       root = blessed.box({
         parent,
@@ -104,7 +121,7 @@ export function createSetupScreen(): TuiScreen {
         height: 9,
         border: 'line',
         label: ' Provider Slots ',
-        keys: true,
+        keys: false,
         mouse: true,
         style: {
           header: { bold: true, fg: 'black', bg: 'white' },
@@ -124,8 +141,12 @@ export function createSetupScreen(): TuiScreen {
         scrollable: true,
         alwaysScroll: true,
         vi: true,
-        keys: true,
+        keys: false,
         mouse: true
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'setup',
+        widgets: ['providers-table', 'checklist-box']
       });
     },
     unmount() {
@@ -166,11 +187,20 @@ export function createSetupScreen(): TuiScreen {
       if (activePane === 'providers-table') {
         const readiness = context.getReadiness();
         const totalRows = readiness?.providers.length ?? 0;
+        const beforeIndex = selectedProviderIndex;
         selectedProviderIndex = moveTableSelection({
           table: providerTable,
           index: selectedProviderIndex,
           delta,
-          totalRows
+          totalRows,
+          selectionSync: providerSelectionSync
+        });
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'setup',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedProviderIndex,
+          delta
         });
         context.screen.render();
         return 'handled';

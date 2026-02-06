@@ -169,7 +169,7 @@ export function createDevicesScreen(): TuiScreen {
         height: '60%',
         border: 'line',
         label: ' Devices ',
-        keys: true,
+        keys: false,
         mouse: true,
         data: [['ID', 'Name', 'Status', 'Space']],
         style: {
@@ -188,10 +188,14 @@ export function createDevicesScreen(): TuiScreen {
         label: ' Details ',
         scrollable: true,
         alwaysScroll: true,
-        keys: true,
+        keys: false,
         mouse: true,
         vi: true,
         content: 'Select a device to view details.'
+      });
+      context.debugLog?.('nav.list.nativeKeysDisabled', {
+        screen: 'devices',
+        widgets: ['devices-table', 'detail-box']
       });
 
       table.on('select item', (_item, index) => {
@@ -267,12 +271,20 @@ export function createDevicesScreen(): TuiScreen {
       }
 
       if (activePane === 'devices-table') {
+        const beforeIndex = selectedIndex;
         selectedIndex = moveTableSelection({
           table,
           index: selectedIndex,
           delta,
           totalRows: filtered.length,
           selectionSync
+        });
+        context.debugLog?.('nav.arrow.updown', {
+          screen: 'devices',
+          pane: activePane,
+          beforeIndex,
+          afterIndex: selectedIndex,
+          delta
         });
         applyFilter();
         return 'handled';
