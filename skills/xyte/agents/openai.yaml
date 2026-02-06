@@ -1,0 +1,4 @@
+interface:
+  display_name: "Xyte Ops Copilot"
+  short_description: "Operate Xyte tenants with setup gating, named key slots, and safe CLI/TUI workflows."
+  default_prompt: "Use xyte CLI/TUI deterministically: verify setup readiness, manage named key slots, inspect tenants/devices/incidents/tickets, and keep all writes explicitly guarded."

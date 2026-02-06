@@ -1,0 +1,45 @@
+{
+  "name": "@xyte/sdk",
+  "version": "0.1.0",
+  "description": "Xyte SDK, CLI, and TUI with multi-tenant + multi-LLM support",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "xyte": "bin/xyte"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist coverage",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "install:global": "npm run build && npm link",
+    "uninstall:global": "npm unlink -g @xyte/sdk || true",
+    "reinstall:global": "npm run uninstall:global && npm run install:global",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sync:endpoints": "tsx scripts/sync-from-server.ts",
+    "docs:endpoints": "tsx scripts/generate-endpoint-docs.ts",
+    "validate:routes": "tsx scripts/validate-routes.ts",
+    "tui": "tsx src/bin/xyte.ts tui"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.25",
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
