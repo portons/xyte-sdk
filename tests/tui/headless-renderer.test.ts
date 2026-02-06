@@ -84,6 +84,7 @@ describe('headless renderer', () => {
     expect((runtimeFrame?.meta as any)?.tabOrder).toEqual(['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot']);
     expect((runtimeFrame?.meta as any)?.tabNavBoundary).toBeNull();
     expect((runtimeFrame?.meta as any)?.renderSafety).toBeDefined();
+    expect((runtimeFrame?.meta as any)?.tableFormat).toBe('compact-v1');
   });
 
   it('renders text frames with logo and panel sections', () => {
@@ -249,6 +250,7 @@ describe('headless renderer', () => {
       expect((runtimeFrame?.meta as any)?.tabId).toBe(screen);
       expect((runtimeFrame?.meta as any)?.tabOrder).toEqual(['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot']);
       expect((runtimeFrame?.meta as any)?.renderSafety).toBeDefined();
+      expect((runtimeFrame?.meta as any)?.tableFormat).toBe('compact-v1');
     }
   });
 });

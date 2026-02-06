@@ -65,6 +65,7 @@ One JSON object per line:
     "tabOrder": ["setup", "config", "dashboard", "spaces", "devices", "incidents", "tickets", "copilot"],
     "tabNavBoundary": null,
     "renderSafety": "ok",
+    "tableFormat": "compact-v1",
     "blocking": true,
     "redirectedFrom": "dashboard"
   }
@@ -97,6 +98,7 @@ One JSON object per line:
 - `tabOrder`: deterministic tab sequence used by arrow-boundary tab navigation
 - `tabNavBoundary`: boundary direction (`left|right`) when relevant, otherwise `null`
 - `renderSafety`: `ok | truncated`, indicates whether payload previews were truncated for stability
+- `tableFormat`: currently `compact-v1` (same compact rows used by interactive TUI)
 
 ## Startup Frames
 

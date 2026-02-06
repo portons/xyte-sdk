@@ -11,7 +11,8 @@ First-run behavior:
 
 ## Global Keys
 
-- `←/→` cycle active pane
+- `←/→` switch tabs
+- `Ctrl+←/→` (or `Shift+←/→`) move pane focus
 - `↑/↓` move row selection / scroll active pane
 - `Enter` run primary action in current pane
 - `u` Setup
@@ -38,17 +39,17 @@ xyte doctor install --format text
 
 - `a` add tenant
 - `u` set active tenant
-- `k` add key slot + secret
+- `k` guided key wizard (provider -> slot -> secret -> review)
 - `p` set active slot
 - `c` connectivity test
 - `r` refresh readiness
 
 ## Config Screen Keys
 
-- `a` add key slot
+- `a` add key slot (guided wizard)
 - `n` rename slot
 - `u` set active slot
-- `e` update key secret
+- `e` update selected slot secret (guided wizard)
 - `x` remove slot (confirmation required)
 - `c` run doctor
 

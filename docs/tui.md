@@ -90,19 +90,26 @@ Use setup/config screens to complete onboarding without leaving TUI.
 
 - `a` add tenant
 - `u` set active tenant
-- `k` add key slot + key value
+- `k` run guided key wizard (provider -> slot -> key -> review -> save)
 - `p` set active slot
 - `c` connectivity check
 - `r` refresh readiness
 
 ## Config Screen Keys
 
-- `a` add key slot
+- `a` add key slot (guided wizard)
 - `n` rename key slot
 - `u` set active key slot
-- `e` update key value for slot
+- `e` update selected slot key (guided wizard)
 - `x` remove slot (confirm required)
 - `c` run connectivity doctor
+
+## Table Readability
+
+- compact presentation rows are generated once and shared by interactive + headless outputs
+- IDs/fingerprints use middle ellipsis, human text uses end ellipsis
+- config slot table stays narrow (`Provider | Slot | Active | Secret`)
+- extra metadata (for example full fingerprint) is shown in detail/action panes
 
 ## Motion and Theme
 

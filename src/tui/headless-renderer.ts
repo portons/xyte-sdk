@@ -63,6 +63,7 @@ function getRefreshState(args: { connectionState: ReadinessCheck['connectionStat
 function withNavigationMeta(screen: TuiScreenId, meta: Record<string, unknown> = {}) {
   const paneConfig = SCREEN_PANE_CONFIG[screen];
   return {
+    tableFormat: 'compact-v1' as const,
     tabId: screen,
     tabOrder: TAB_ORDER,
     tabNavBoundary: null,
@@ -212,6 +213,7 @@ async function buildConfigFrame(args: {
       active: tenant.id === data.activeTenantId ? 'yes' : 'no'
     })),
     slotRows,
+    selectedSlot: slotRows.find((row) => row.active === 'yes') ?? slotRows[0],
     doctorStatus: args.doctorStatus
   });
 

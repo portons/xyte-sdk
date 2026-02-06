@@ -19,8 +19,8 @@ export const GLOBAL_KEYMAP: Array<{ keys: string; description: string }> = [
 ];
 
 export const SCREEN_ACTION_KEYMAP: Array<{ keys: string; description: string }> = [
-  { keys: 'Setup: a/u/k/p/c/r', description: 'Tenant + key-slot setup and connectivity checks' },
-  { keys: 'Config: a/n/u/e/x/c', description: 'Add/rename/use/update/remove key slots and run probes' },
+  { keys: 'Setup: a/u/k/p/c/r', description: 'Tenant setup + guided key wizard + connectivity checks' },
+  { keys: 'Config: a/n/u/e/x/c', description: 'Guided key add/update, rename/use/remove slots, connectivity doctor' },
   { keys: 'Spaces: Enter', description: 'Load selected space details and devices asynchronously' },
   { keys: 'Devices: Enter', description: 'Open selected device details' },
   { keys: 'Incidents: x', description: 'Run incident triage on selected incident' },

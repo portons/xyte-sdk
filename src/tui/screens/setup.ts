@@ -11,9 +11,9 @@ import {
 } from '../navigation';
 import { SCREEN_PANE_CONFIG } from '../panes';
 import type { TuiArrowKey, TuiContext, TuiScreen } from '../types';
-import { makeKeyFingerprint } from '../../secure/key-slots';
 import type { SecretProvider } from '../../types/profile';
 import { sceneFromSetupState } from '../scene';
+import { runKeyCreateWizard } from '../key-wizard';
 
 const PROVIDERS: SecretProvider[] = ['xyte-org', 'xyte-partner', 'xyte-device', 'openai', 'anthropic', 'openai-compatible'];
 
@@ -36,6 +36,7 @@ export function createSetupScreen(): TuiScreen {
     syncing: false,
     name: 'setup-providers'
   };
+  let providerRowsState: SecretProvider[] = [];
   const paneConfig = SCREEN_PANE_CONFIG.setup;
   let activePane = paneConfig.defaultPane;
   let isMounted = false;
@@ -69,6 +70,7 @@ export function createSetupScreen(): TuiScreen {
         hasSecret: provider.hasActiveSecret ? 'yes' : 'no'
       }))
     });
+    providerRowsState = readiness.providers.map((provider) => provider.provider);
 
     const overview = panels.find((panel) => panel.id === 'setup-overview');
     const providers = panels.find((panel) => panel.id === 'setup-providers');
@@ -263,39 +265,23 @@ export function createSetupScreen(): TuiScreen {
             context.setStatus('Set an active tenant first (a/u).');
             return true;
           }
-          const providerText = (await context.prompt('Provider:', 'xyte-org'))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!providerText) {
-            return true;
-          }
-          const provider = parseProvider(providerText);
-          const slotName = (await context.prompt('Slot name:', 'primary'))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!slotName) {
-            return true;
-          }
-          const keyValue = (await context.promptSecret('API key value:', ''))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!keyValue) {
-            context.setStatus('Key value is required.');
-            return true;
-          }
-
-          const slot = await context.profileStore.addKeySlot(tenantId, {
-            provider,
-            name: slotName,
-            fingerprint: makeKeyFingerprint(keyValue)
+          const selectedProvider = providerRowsState[clampIndex(selectedProviderIndex, providerRowsState.length)] ?? 'xyte-org';
+          const result = await runKeyCreateWizard({
+            context,
+            tenantId,
+            defaultProvider: selectedProvider,
+            defaultSlotName: 'primary',
+            setActiveDefault: true
           });
-          await context.keychain.setSlotSecret(tenantId, provider, slot.slotId, keyValue);
-          await context.profileStore.setActiveKeySlot(tenantId, provider, slot.slotId);
+          if (!isMounted) {
+            return true;
+          }
           await this.refresh();
-          context.setStatus(`Stored key slot ${slot.slotId} for ${provider}.`);
+          if (result.canceled) {
+            context.setStatus(result.message);
+            return true;
+          }
+          context.setStatus(result.message);
           return true;
         }
 

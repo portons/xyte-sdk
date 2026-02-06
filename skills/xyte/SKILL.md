@@ -39,9 +39,9 @@ description: Operate Xyte multi-tenant fleets through @xyte/sdk CLI/TUI with set
 Interactive:
 - `xyte tui`
 - global keys: `u` setup, `g` config, `d/s/v/i/t/p` operational screens.
-- pane-focus arrows: `←/→` switch pane, `↑/↓` move/scroll, `Enter` primary pane action.
-- setup actions: `a/u/k/p/c/r`.
-- config actions: `a/n/u/e/x/c`.
+- pane-focus arrows: `←/→` switch tabs, `Ctrl+←/→` (or `Shift+←/→`) switch pane, `↑/↓` move/scroll, `Enter` primary pane action.
+- setup actions: `a/u/k/p/c/r` (`k` is guided key wizard).
+- config actions: `a/n/u/e/x/c` (`a` and `e` use guided key wizard).
 - tickets: `m` draft, `R` resolve, `rr` resolve alias.
 
 Headless for agents:

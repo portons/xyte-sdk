@@ -1,6 +1,6 @@
 import blessed from 'blessed';
 
-import { makeKeyFingerprint, matchesSlotRef } from '../../secure/key-slots';
+import { matchesSlotRef } from '../../secure/key-slots';
 import type { SecretProvider } from '../../types/profile';
 import {
   clampIndex,
@@ -13,6 +13,7 @@ import {
 } from '../navigation';
 import { SCREEN_PANE_CONFIG } from '../panes';
 import { sceneFromConfigState } from '../scene';
+import { runKeyCreateWizard, runKeyUpdateWizard } from '../key-wizard';
 import type { TuiArrowKey, TuiContext, TuiScreen } from '../types';
 
 const PROVIDERS: SecretProvider[] = ['xyte-org', 'xyte-partner', 'xyte-device', 'openai', 'anthropic', 'openai-compatible'];
@@ -42,6 +43,14 @@ export function createConfigScreen(): TuiScreen {
     syncing: false,
     name: 'config-slots'
   };
+  let slotRowsState: Array<{
+    provider: SecretProvider;
+    slotId: string;
+    name: string;
+    active: 'yes' | 'no';
+    hasSecret: 'yes' | 'no';
+    fingerprint: string;
+  }> = [];
   const paneConfig = SCREEN_PANE_CONFIG.config;
   let activePane = paneConfig.defaultPane;
   let isMounted = false;
@@ -83,6 +92,16 @@ export function createConfigScreen(): TuiScreen {
       }
     }
 
+    slotRowsState = slotsWithSecret.map((slot) => ({
+      provider: slot.provider,
+      slotId: slot.slotId,
+      name: slot.name,
+      active: activeSlots.get(slot.provider) === slot.slotId ? 'yes' : 'no',
+      hasSecret: slot.hasSecret ? 'yes' : 'no',
+      fingerprint: slot.fingerprint
+    }));
+    selectedSlotIndex = clampIndex(selectedSlotIndex, slotRowsState.length);
+
     const panels = sceneFromConfigState({
       tenantId: activeTenantId,
       tenantRows: data.tenants.map((tenant) => ({
@@ -90,14 +109,8 @@ export function createConfigScreen(): TuiScreen {
         name: tenant.name,
         active: tenant.id === data.activeTenantId ? 'yes' : 'no'
       })),
-      slotRows: slotsWithSecret.map((slot) => ({
-        provider: slot.provider,
-        slotId: slot.slotId,
-        name: slot.name,
-        active: activeSlots.get(slot.provider) === slot.slotId ? 'yes' : 'no',
-        hasSecret: slot.hasSecret ? 'yes' : 'no',
-        fingerprint: slot.fingerprint
-      })),
+      slotRows: slotRowsState,
+      selectedSlot: slotRowsState[selectedSlotIndex],
       doctorStatus
     });
 
@@ -112,17 +125,9 @@ export function createConfigScreen(): TuiScreen {
     selectedTenantIndex = clampIndex(selectedTenantIndex, data.tenants.length);
     syncListSelection(tenantTable, selectedTenantIndex, tenantSelectionSync);
     setListTableData(slotTable, [
-      (slotPanel?.table?.columns ?? ['Provider', 'Slot', 'Name', 'Active', 'Has Secret', 'Fingerprint']) as [
-        string,
-        string,
-        string,
-        string,
-        string,
-        string
-      ],
-      ...((slotPanel?.table?.rows ?? []) as Array<[string, string, string, string, string, string]>)
+      (slotPanel?.table?.columns ?? ['Provider', 'Slot', 'Active', 'Secret']) as [string, string, string, string],
+      ...((slotPanel?.table?.rows ?? []) as Array<[string, string, string, string]>)
     ], slotSelectionSync);
-    selectedSlotIndex = clampIndex(selectedSlotIndex, slotsWithSecret.length);
     syncListSelection(slotTable, selectedSlotIndex, slotSelectionSync);
     actionBox?.setContent((actionPanel?.text?.lines ?? []).join('\n'));
     focusPane();
@@ -182,7 +187,7 @@ export function createConfigScreen(): TuiScreen {
           header: { bold: true, fg: 'black', bg: 'white' },
           cell: { selected: { bg: 'blue' } }
         },
-        data: [['Provider', 'Slot', 'Name', 'Active', 'Has Secret', 'Fingerprint']]
+        data: [['Provider', 'Slot', 'Active', 'Secret']]
       });
 
       actionBox = blessed.box({
@@ -308,43 +313,29 @@ export function createConfigScreen(): TuiScreen {
         }
 
         if (ch === 'a' && tenantId) {
-          const provider = parseProvider((await context.prompt('Provider:', 'xyte-org'))?.trim() || '');
-          if (!isMounted) {
-            return true;
-          }
-          const slotName = (await context.prompt('Slot name:', 'primary'))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!slotName) {
-            return true;
-          }
-          const keyValue = (await context.promptSecret('API key value:', ''))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!keyValue) {
-            context.setStatus('Key value is required.');
-            return true;
-          }
-          const slot = await context.profileStore.addKeySlot(tenantId, {
-            provider,
-            name: slotName,
-            fingerprint: makeKeyFingerprint(keyValue)
+          const selectedSlot = slotRowsState[clampIndex(selectedSlotIndex, slotRowsState.length)];
+          const result = await runKeyCreateWizard({
+            context,
+            tenantId,
+            defaultProvider: selectedSlot?.provider ?? 'xyte-org',
+            defaultSlotName: 'primary',
+            setActiveDefault: true
           });
-          await context.keychain.setSlotSecret(tenantId, provider, slot.slotId, keyValue);
-          await context.profileStore.setActiveKeySlot(tenantId, provider, slot.slotId);
+          if (!isMounted) {
+            return true;
+          }
           await this.refresh();
-          context.setStatus(`Added slot ${slot.slotId}.`);
+          context.setStatus(result.message);
           return true;
         }
 
         if (ch === 'n' && tenantId) {
-          const provider = parseProvider((await context.prompt('Provider:', 'xyte-org'))?.trim() || '');
+          const selectedSlot = slotRowsState[clampIndex(selectedSlotIndex, slotRowsState.length)];
+          const provider = parseProvider((await context.prompt('Provider:', selectedSlot?.provider ?? 'xyte-org'))?.trim() || '');
           if (!isMounted) {
             return true;
           }
-          const slotRef = (await context.prompt('Slot id or name:', ''))?.trim();
+          const slotRef = (await context.prompt('Slot id or name:', selectedSlot?.slotId ?? selectedSlot?.name ?? ''))?.trim();
           if (!isMounted) {
             return true;
           }
@@ -365,11 +356,12 @@ export function createConfigScreen(): TuiScreen {
         }
 
         if (ch === 'u' && tenantId) {
-          const provider = parseProvider((await context.prompt('Provider:', 'xyte-org'))?.trim() || '');
+          const selectedSlot = slotRowsState[clampIndex(selectedSlotIndex, slotRowsState.length)];
+          const provider = parseProvider((await context.prompt('Provider:', selectedSlot?.provider ?? 'xyte-org'))?.trim() || '');
           if (!isMounted) {
             return true;
           }
-          const slotRef = (await context.prompt('Slot id or name:', ''))?.trim();
+          const slotRef = (await context.prompt('Slot id or name:', selectedSlot?.slotId ?? selectedSlot?.name ?? ''))?.trim();
           if (!isMounted) {
             return true;
           }
@@ -383,45 +375,52 @@ export function createConfigScreen(): TuiScreen {
         }
 
         if (ch === 'e' && tenantId) {
-          const provider = parseProvider((await context.prompt('Provider:', 'xyte-org'))?.trim() || '');
+          const selectedSlot = slotRowsState[clampIndex(selectedSlotIndex, slotRowsState.length)];
+          let result;
+          if (selectedSlot) {
+            result = await runKeyUpdateWizard({
+              context,
+              tenantId,
+              provider: selectedSlot.provider,
+              slotRef: selectedSlot.slotId,
+              promptEditSelected: true,
+              setActiveDefault: selectedSlot.active === 'yes'
+            });
+          } else {
+            const provider = parseProvider((await context.prompt('Provider:', 'xyte-org'))?.trim() || '');
+            if (!isMounted) {
+              return true;
+            }
+            const slotRef = (await context.prompt('Slot id or name:', ''))?.trim();
+            if (!isMounted) {
+              return true;
+            }
+            if (!slotRef) {
+              return true;
+            }
+            result = await runKeyUpdateWizard({
+              context,
+              tenantId,
+              provider,
+              slotRef,
+              setActiveDefault: true
+            });
+          }
           if (!isMounted) {
             return true;
           }
-          const slotRef = (await context.prompt('Slot id or name:', ''))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!slotRef) {
-            return true;
-          }
-          const keyValue = (await context.promptSecret('New key value:', ''))?.trim();
-          if (!isMounted) {
-            return true;
-          }
-          if (!keyValue) {
-            context.setStatus('Key value is required.');
-            return true;
-          }
-          const slots = await context.profileStore.listKeySlots(tenantId, provider);
-          const slot = slots.find((item) => matchesSlotRef(item, slotRef));
-          if (!slot) {
-            throw new Error(`Unknown slot "${slotRef}" for ${provider}.`);
-          }
-          await context.keychain.setSlotSecret(tenantId, provider, slot.slotId, keyValue);
-          await context.profileStore.updateKeySlot(tenantId, provider, slot.slotId, {
-            fingerprint: makeKeyFingerprint(keyValue)
-          });
           await this.refresh();
-          context.setStatus(`Updated key for slot ${slot.slotId}.`);
+          context.setStatus(result.message);
           return true;
         }
 
         if (ch === 'x' && tenantId) {
-          const provider = parseProvider((await context.prompt('Provider:', 'xyte-org'))?.trim() || '');
+          const selectedSlot = slotRowsState[clampIndex(selectedSlotIndex, slotRowsState.length)];
+          const provider = parseProvider((await context.prompt('Provider:', selectedSlot?.provider ?? 'xyte-org'))?.trim() || '');
           if (!isMounted) {
             return true;
           }
-          const slotRef = (await context.prompt('Slot id or name:', ''))?.trim();
+          const slotRef = (await context.prompt('Slot id or name:', selectedSlot?.slotId ?? selectedSlot?.name ?? ''))?.trim();
           if (!isMounted) {
             return true;
           }

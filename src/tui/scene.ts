@@ -1,5 +1,6 @@
 import type { TuiScreenId } from './types';
 import { safePreviewLines } from './serialize';
+import { fitCell, formatBoolTag, sanitizePrintable, shortId } from './table-format';
 
 export type FrameInputState = 'idle' | 'modal' | 'busy';
 export type FrameTransitionState = 'idle' | 'switching';
@@ -18,6 +19,7 @@ export interface HeadlessFrameMeta {
   tabOrder?: TuiScreenId[];
   tabNavBoundary?: 'left' | 'right' | null;
   renderSafety?: 'ok' | 'truncated';
+  tableFormat?: 'compact-v1';
   [key: string]: unknown;
 }
 
@@ -124,6 +126,7 @@ export interface ConfigSceneState {
   tenantId?: string;
   tenantRows: Array<{ id: string; name: string; active: string }>;
   slotRows: Array<{ provider: string; slotId: string; name: string; active: string; hasSecret: string; fingerprint: string }>;
+  selectedSlot?: { provider: string; slotId: string; name: string; active: string; hasSecret: string; fingerprint: string };
   doctorStatus?: string;
 }
 
@@ -141,6 +144,17 @@ function safeName(item: any): string {
 
 function safeStatus(item: any): string {
   return String(item?.status ?? item?.state ?? item?.online_status ?? 'unknown');
+}
+
+function safeSpaceId(item: any, index: number): string {
+  return String(item?.id ?? item?.space_id ?? item?._id ?? item?.uuid ?? `space-${index + 1}`);
+}
+
+function detailBlock(lines: string[], preview?: { lines: string[] }): string[] {
+  if (!preview) {
+    return lines;
+  }
+  return [...lines, '', 'Preview:', ...preview.lines];
 }
 
 function clampSelection(index: number, total: number): number {
@@ -180,8 +194,12 @@ export function sceneFromDashboardState(state: DashboardSceneState): ScenePanel[
       title: 'Recent Incidents',
       kind: 'table',
       table: {
-        columns: ['ID', 'Name', 'Status'],
-        rows: sampleRows(state.incidents).map((item, index) => [safeId(item, index), safeName(item), safeStatus(item)])
+        columns: ['ID', 'Name', 'State'],
+        rows: sampleRows(state.incidents).map((item, index) => [
+          shortId(safeId(item, index)),
+          fitCell(safeName(item), 26, 'end'),
+          fitCell(safeStatus(item), 10, 'end')
+        ])
       }
     },
     {
@@ -189,8 +207,12 @@ export function sceneFromDashboardState(state: DashboardSceneState): ScenePanel[
       title: 'Recent Tickets',
       kind: 'table',
       table: {
-        columns: ['ID', 'Subject', 'Status'],
-        rows: sampleRows(state.tickets).map((item, index) => [safeId(item, index), safeName(item), safeStatus(item)])
+        columns: ['ID', 'Subject', 'State'],
+        rows: sampleRows(state.tickets).map((item, index) => [
+          shortId(safeId(item, index)),
+          fitCell(safeName(item), 26, 'end'),
+          fitCell(safeStatus(item), 10, 'end')
+        ])
       }
     }
   ];
@@ -200,6 +222,17 @@ export function sceneFromDevicesState(state: DevicesSceneState): ScenePanel[] {
   const selectedIndex = clampSelection(state.selectedIndex, state.devices.length);
   const selected = state.devices[selectedIndex];
   const preview = selected ? safePreviewLines(selected) : undefined;
+  const detailLines = selected
+    ? detailBlock(
+        [
+          `ID: ${sanitizePrintable(selected?.id ?? selected?._id ?? selected?.uuid ?? 'n/a')}`,
+          `Name: ${sanitizePrintable(selected?.name ?? selected?.title ?? 'n/a')}`,
+          `State: ${sanitizePrintable(selected?.status ?? selected?.state ?? selected?.online_status ?? 'unknown')}`,
+          `Space: ${sanitizePrintable(selected?.space_name ?? selected?.space_id ?? 'n/a')}`
+        ],
+        preview
+      )
+    : ['No matching devices.'];
 
   return [
     {
@@ -207,12 +240,12 @@ export function sceneFromDevicesState(state: DevicesSceneState): ScenePanel[] {
       title: 'Devices',
       kind: 'table',
       table: {
-        columns: ['ID', 'Name', 'Status', 'Space'],
+        columns: ['ID', 'Name', 'State', 'Space'],
         rows: state.devices.map((item, index) => [
-          safeId(item, index),
-          safeName(item),
-          safeStatus(item),
-          String(item?.space_name ?? item?.space_id ?? 'n/a')
+          shortId(safeId(item, index)),
+          fitCell(safeName(item), 24, 'end'),
+          fitCell(safeStatus(item), 10, 'end'),
+          fitCell(item?.space_name ?? item?.space_id ?? 'n/a', 20, 'end')
         ])
       },
       status: state.searchText ? `filter=${state.searchText}` : 'filter=none'
@@ -222,7 +255,7 @@ export function sceneFromDevicesState(state: DevicesSceneState): ScenePanel[] {
       title: 'Device Detail',
       kind: 'text',
       text: {
-        lines: preview?.lines ?? ['No matching devices.']
+        lines: detailLines
       }
     }
   ];
@@ -232,6 +265,17 @@ export function sceneFromIncidentsState(state: IncidentsSceneState): ScenePanel[
   const selectedIndex = clampSelection(state.selectedIndex, state.incidents.length);
   const selected = state.incidents[selectedIndex];
   const preview = selected ? safePreviewLines(selected) : undefined;
+  const detailLines = selected
+    ? detailBlock(
+        [
+          `ID: ${sanitizePrintable(selected?.id ?? selected?._id ?? selected?.uuid ?? 'n/a')}`,
+          `Sev: ${sanitizePrintable(selected?.severity ?? selected?.priority ?? 'unknown')}`,
+          `State: ${sanitizePrintable(selected?.status ?? selected?.state ?? 'unknown')}`,
+          `Device: ${sanitizePrintable(selected?.device_id ?? selected?.device?.id ?? 'n/a')}`
+        ],
+        preview
+      )
+    : ['No incidents.'];
 
   return [
     {
@@ -239,12 +283,12 @@ export function sceneFromIncidentsState(state: IncidentsSceneState): ScenePanel[
       title: 'Incidents',
       kind: 'table',
       table: {
-        columns: ['ID', 'Severity', 'State', 'Device'],
+        columns: ['ID', 'Sev', 'State', 'Device'],
         rows: state.incidents.map((item, index) => [
-          safeId(item, index),
-          String(item?.severity ?? item?.priority ?? 'unknown'),
-          safeStatus(item),
-          String(item?.device_id ?? item?.device?.id ?? 'n/a')
+          shortId(safeId(item, index)),
+          fitCell(item?.severity ?? item?.priority ?? 'unknown', 7, 'end'),
+          fitCell(safeStatus(item), 10, 'end'),
+          shortId(item?.device_id ?? item?.device?.id ?? 'n/a')
         ])
       },
       status: state.severityFilter ? `severity=${state.severityFilter}` : 'severity=all'
@@ -254,7 +298,7 @@ export function sceneFromIncidentsState(state: IncidentsSceneState): ScenePanel[
       title: 'Incident Detail',
       kind: 'text',
       text: {
-        lines: preview?.lines ?? ['No incidents.']
+        lines: detailLines
       }
     },
     {
@@ -272,6 +316,20 @@ export function sceneFromTicketsState(state: TicketsSceneState): ScenePanel[] {
   const selectedIndex = clampSelection(state.selectedIndex, state.tickets.length);
   const selected = state.tickets[selectedIndex];
   const preview = selected ? safePreviewLines(selected) : undefined;
+  const selectedSummary = selected
+    ? [
+        `ID: ${sanitizePrintable(selected?.id ?? selected?._id ?? 'n/a')}`,
+        `State: ${sanitizePrintable(selected?.status ?? selected?.state ?? 'unknown')}`,
+        `Pri: ${sanitizePrintable(selected?.priority ?? 'n/a')}`,
+        `Subject: ${sanitizePrintable(selected?.subject ?? selected?.title ?? 'n/a')}`,
+        ''
+      ]
+    : [];
+  const detailLines = state.detailText
+    ? [...selectedSummary, ...state.detailText.split('\n')]
+    : selected
+      ? detailBlock(selectedSummary, preview)
+      : ['No tickets.'];
 
   return [
     {
@@ -279,12 +337,12 @@ export function sceneFromTicketsState(state: TicketsSceneState): ScenePanel[] {
       title: 'Tickets',
       kind: 'table',
       table: {
-        columns: ['ID', 'Status', 'Priority', 'Subject'],
+        columns: ['ID', 'State', 'Pri', 'Subject'],
         rows: state.tickets.map((item, index) => [
-          safeId(item, index),
-          safeStatus(item),
-          String(item?.priority ?? 'n/a'),
-          String(item?.subject ?? item?.title ?? 'n/a')
+          shortId(safeId(item, index)),
+          fitCell(safeStatus(item), 10, 'end'),
+          fitCell(item?.priority ?? 'n/a', 6, 'end'),
+          fitCell(item?.subject ?? item?.title ?? 'n/a', 28, 'end')
         ])
       },
       status: `mode=${state.mode}${state.searchText ? ` filter=${state.searchText}` : ''}`
@@ -294,9 +352,7 @@ export function sceneFromTicketsState(state: TicketsSceneState): ScenePanel[] {
       title: 'Ticket Detail',
       kind: 'text',
       text: {
-        lines: state.detailText
-          ? state.detailText.split('\n')
-          : preview?.lines ?? ['No tickets.']
+        lines: detailLines
       }
     },
     {
@@ -314,6 +370,17 @@ export function sceneFromSpacesState(state: SpacesSceneState): ScenePanel[] {
   const selectedIndex = clampSelection(state.selectedIndex, state.spaces.length);
   const selected = state.spaces[selectedIndex];
   const detailPreview = state.spaceDetail ? safePreviewLines(state.spaceDetail) : selected ? safePreviewLines(selected) : undefined;
+  const detailLines = selected
+    ? detailBlock(
+        [
+          `ID: ${sanitizePrintable(safeSpaceId(selected, selectedIndex))}`,
+          `Name: ${sanitizePrintable(selected?.name ?? selected?.title ?? 'n/a')}`,
+          `Type: ${sanitizePrintable(selected?.space_type ?? selected?.type ?? 'n/a')}`,
+          `Path: ${sanitizePrintable(selected?.path ?? selected?.full_path ?? 'n/a')}`
+        ],
+        detailPreview
+      )
+    : ['No spaces.'];
 
   return [
     {
@@ -323,10 +390,10 @@ export function sceneFromSpacesState(state: SpacesSceneState): ScenePanel[] {
       table: {
         columns: ['ID', 'Name', 'Type', 'Path'],
         rows: state.spaces.map((item, index) => [
-          safeId(item, index),
-          safeName(item),
-          String(item?.space_type ?? item?.type ?? 'n/a'),
-          String(item?.path ?? item?.full_path ?? 'n/a')
+          shortId(safeId(item, index)),
+          fitCell(safeName(item), 22, 'end'),
+          fitCell(item?.space_type ?? item?.type ?? 'n/a', 10, 'end'),
+          fitCell(item?.path ?? item?.full_path ?? 'n/a', 28, 'end')
         ])
       },
       status: state.searchText ? `filter=${state.searchText}` : 'filter=none'
@@ -336,7 +403,7 @@ export function sceneFromSpacesState(state: SpacesSceneState): ScenePanel[] {
       title: 'Space Detail',
       kind: 'text',
       text: {
-        lines: detailPreview?.lines ?? ['No spaces.']
+        lines: detailLines
       },
       status: state.loading ? 'loading=1' : 'loading=0'
     },
@@ -345,8 +412,12 @@ export function sceneFromSpacesState(state: SpacesSceneState): ScenePanel[] {
       title: 'Devices In Space',
       kind: 'table',
       table: {
-        columns: ['ID', 'Name', 'Status'],
-        rows: state.devicesInSpace.map((item, index) => [safeId(item, index), safeName(item), safeStatus(item)])
+        columns: ['ID', 'Name', 'State'],
+        rows: state.devicesInSpace.map((item, index) => [
+          shortId(safeId(item, index)),
+          fitCell(safeName(item), 24, 'end'),
+          fitCell(safeStatus(item), 10, 'end')
+        ])
       },
       status: state.paneStatus
     }
@@ -398,7 +469,12 @@ export function sceneFromSetupState(state: SetupSceneState): ScenePanel[] {
       kind: 'table',
       table: {
         columns: ['Provider', 'Slots', 'Active Slot', 'Has Secret'],
-        rows: state.providerRows.map((row) => [row.provider, row.slotCount, row.activeSlot, row.hasSecret])
+        rows: state.providerRows.map((row) => [
+          fitCell(row.provider, 20, 'end'),
+          row.slotCount,
+          shortId(row.activeSlot),
+          formatBoolTag(row.hasSecret)
+        ])
       }
     },
     {
@@ -413,7 +489,13 @@ export function sceneFromSetupState(state: SetupSceneState): ScenePanel[] {
           ...(state.recommendedActions.length ? ['Recommended actions:'] : ['No recommendations.']),
           ...state.recommendedActions.map((item) => `- ${item}`),
           '',
-          'Interactive actions: a=add tenant, u=use tenant, k=add key, p=set active slot, c=test connectivity, r=refresh',
+          'Interactive actions:',
+          '- a add tenant',
+          '- u use tenant',
+          '- k guided key wizard (provider -> slot -> secret -> review)',
+          '- p set active slot',
+          '- c test connectivity',
+          '- r refresh',
           'Global keys: u/g/d/s/v/i/t/p, r refresh, ? help, q quit'
         ]
       }
@@ -422,6 +504,7 @@ export function sceneFromSetupState(state: SetupSceneState): ScenePanel[] {
 }
 
 export function sceneFromConfigState(state: ConfigSceneState): ScenePanel[] {
+  const selectedSlot = state.selectedSlot;
   return [
     {
       id: 'config-tenants',
@@ -429,7 +512,7 @@ export function sceneFromConfigState(state: ConfigSceneState): ScenePanel[] {
       kind: 'table',
       table: {
         columns: ['ID', 'Name', 'Active'],
-        rows: state.tenantRows.map((row) => [row.id, row.name, row.active])
+        rows: state.tenantRows.map((row) => [shortId(row.id), fitCell(row.name, 24, 'end'), formatBoolTag(row.active)])
       }
     },
     {
@@ -437,8 +520,13 @@ export function sceneFromConfigState(state: ConfigSceneState): ScenePanel[] {
       title: 'Key Slots',
       kind: 'table',
       table: {
-        columns: ['Provider', 'Slot', 'Name', 'Active', 'Has Secret', 'Fingerprint'],
-        rows: state.slotRows.map((row) => [row.provider, row.slotId, row.name, row.active, row.hasSecret, row.fingerprint])
+        columns: ['Provider', 'Slot', 'Active', 'Secret'],
+        rows: state.slotRows.map((row) => [
+          fitCell(row.provider, 16, 'end'),
+          fitCell(`${row.name} (${shortId(row.slotId, { head: 4, tail: 3 })})`, 26, 'end'),
+          formatBoolTag(row.active),
+          formatBoolTag(row.hasSecret)
+        ])
       }
     },
     {
@@ -449,7 +537,24 @@ export function sceneFromConfigState(state: ConfigSceneState): ScenePanel[] {
         lines: [
           `Doctor: ${state.doctorStatus ?? 'not run'}`,
           '',
-          'Interactive actions: a=add slot, n=rename, u=use slot, e=update key, x=remove slot, c=doctor',
+          ...(selectedSlot
+            ? [
+                'Selected slot:',
+                `- Provider: ${selectedSlot.provider}`,
+                `- Slot: ${selectedSlot.name} (${selectedSlot.slotId})`,
+                `- Fingerprint: ${selectedSlot.fingerprint}`,
+                `- Active: ${formatBoolTag(selectedSlot.active)}`,
+                `- Secret stored: ${formatBoolTag(selectedSlot.hasSecret)}`,
+                ''
+              ]
+            : ['Selected slot: none', '']),
+          'Interactive actions:',
+          '- a add slot (guided wizard)',
+          '- n rename slot',
+          '- u use slot',
+          '- e update key (guided wizard)',
+          '- x remove slot',
+          '- c doctor',
           'Global keys: u/g/d/s/v/i/t/p, r refresh, ? help, q quit'
         ]
       }
@@ -478,7 +583,8 @@ export function createHeadlessFrame(args: {
     availablePanes: [],
     activePane: '',
     tabNavBoundary: null,
-    renderSafety: 'ok'
+    renderSafety: 'ok',
+    tableFormat: 'compact-v1'
   };
   return {
     timestamp: new Date().toISOString(),

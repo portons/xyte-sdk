@@ -163,18 +163,23 @@ Global keys:
 Setup screen actions:
 - `a` add tenant
 - `u` set active tenant
-- `k` add key slot + secret
+- `k` run guided key wizard (provider -> slot -> secret -> review)
 - `p` set active key slot
 - `c` connectivity test
 - `r` refresh readiness
 
 Config screen actions:
-- `a` add slot
+- `a` add slot (guided wizard)
 - `n` rename slot
 - `u` set active slot
-- `e` edit key value
+- `e` update selected slot key (guided wizard)
 - `x` remove slot (confirm dialog)
 - `c` run connectivity doctor
+
+Readability updates:
+- compact table layout with consistent spacing and safer column widths
+- middle ellipsis for IDs/hashes, end ellipsis for names/subjects/paths
+- full details stay available in detail panes (with safe preview truncation when needed)
 
 Ticket actions:
 - `m` draft reply suggestions
