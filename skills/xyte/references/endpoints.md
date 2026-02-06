@@ -1,24 +1,75 @@
-# Endpoint Usage Reference
+# Endpoint Usage Reference (CLI + Headless Agents)
 
-## Discovery
+Use this file for deterministic endpoint operations with `xyte call`.
 
-- `xyte list-endpoints`
-- `xyte describe-endpoint <key>`
+## Discovery Sequence
 
-## Generic Invocation Pattern
-
+1. List available endpoint keys:
 ```bash
-xyte call <key> \
+xyte list-endpoints
+```
+
+2. Inspect one endpoint contract before calling:
+```bash
+xyte describe-endpoint <endpoint-key>
+```
+
+3. Call with explicit tenant and structured params:
+```bash
+xyte call <endpoint-key> \
   --tenant <tenant-id> \
   --path-json '{"id":"..."}' \
   --query-json '{"page":1}' \
   --body-json '{"field":"value"}'
 ```
 
-## Safety Flags
+## Guard Requirements by Method
 
-- Any non-read endpoint must include `--allow-write`.
-- `DELETE` endpoints must include `--confirm <endpoint-key>`.
+| Method | Guard Requirement |
+| --- | --- |
+| `GET`, `HEAD`, `OPTIONS` | No write guard required |
+| `POST`, `PUT`, `PATCH` | Must include `--allow-write` |
+| `DELETE` | Must include `--allow-write` and `--confirm <endpoint-key>` |
+
+## Filters and Pagination Matrix (from spec)
+
+Source: `/Users/porton/Projects/xyte-sdk/src/spec/public-endpoints.json`
+
+| Endpoint Key | Query Fields | Pagination Fields | Notes |
+| --- | --- | --- | --- |
+| `organization.spaces.getSpaces` | `page`, `per_page`, `id`, `parent_id`, `name`, `path_includes`, `space_type`, `created_before`, `created_after` | `page`, `per_page` | Main listing endpoint with server-side filtering |
+| `organization.devices.getHistories` | `status`, `from`, `to`, `device_id`, `space_id`, `name` | none | Filtered history lookup; can be time-windowed |
+
+All other current endpoint specs in this repo have no declared query params.
+
+## Concrete Filter/Pagination Examples
+
+### `organization.spaces.getSpaces`
+
+```bash
+xyte call organization.spaces.getSpaces \
+  --tenant <tenant-id> \
+  --query-json '{
+    "page": 1,
+    "per_page": 25,
+    "parent_id": "<space-id>",
+    "name": "room",
+    "space_type": "room"
+  }'
+```
+
+### `organization.devices.getHistories`
+
+```bash
+xyte call organization.devices.getHistories \
+  --tenant <tenant-id> \
+  --query-json '{
+    "status": "online",
+    "from": "2026-02-01T00:00:00Z",
+    "to": "2026-02-06T23:59:59Z",
+    "space_id": "<space-id>"
+  }'
+```
 
 ## Common Endpoint Keys
 
@@ -39,8 +90,18 @@ Device:
 - `device.telemetries.sendTelemetry`
 - `device.device-info.setCloudSettings`
 
-## Multi-tenant Guidance
+## Multi-tenant Determinism
 
-- Every tenant keeps separate credentials in keychain.
-- Always pass `--tenant <id>` for deterministic behavior when automating.
-- Use `xyte tenant use <id>` to update active tenant for interactive sessions.
+- Always pass `--tenant <tenant-id>` for automation.
+- Use `xyte tenant use <tenant-id>` only for interactive/default context.
+- Keep auth explicit with named slots:
+  - `xyte auth key list --tenant <tenant-id> --format json`
+  - `xyte auth key use --tenant <tenant-id> --provider <provider> --slot <id|name>`
+
+## Utility
+
+Generate a fresh query/filter report from spec:
+
+```bash
+skills/xyte/scripts/endpoint_filters_report.sh
+```

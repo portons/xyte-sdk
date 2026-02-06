@@ -1,4 +1,4 @@
 interface:
   display_name: "Xyte Ops Copilot"
-  short_description: "Operate Xyte tenants with setup gating, named key slots, and safe CLI/TUI workflows."
-  default_prompt: "Use xyte CLI/TUI deterministically: verify setup readiness, manage named key slots, inspect tenants/devices/incidents/tickets, and keep all writes explicitly guarded."
+  short_description: "Operate Xyte tenants via deterministic CLI/headless workflows."
+  default_prompt: "Use $xyte to run deterministic CLI/headless Xyte operations: setup readiness, manage tenant key slots, inspect fleet data, and run guarded endpoint calls."

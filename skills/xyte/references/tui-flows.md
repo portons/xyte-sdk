@@ -1,106 +1,124 @@
-# TUI + Headless Flows
+# Headless Flows (Agent-First)
 
-## Interactive Launch
+Use `xyte tui --headless` as the visual/tooling interface for agents.
 
-```bash
-xyte tui
-```
-
-First-run behavior:
-- If readiness is incomplete, app opens `Setup` and blocks operational screens.
-
-## Global Keys
-
-- `←/→` switch tabs
-- `Ctrl+←/→` (or `Shift+←/→`) move pane focus
-- `↑/↓` move row selection / scroll active pane
-- `Enter` run primary action in current pane
-- `u` Setup
-- `g` Config
-- `d` Dashboard
-- `s` Spaces
-- `v` Devices
-- `i` Incidents
-- `t` Tickets
-- `p` Copilot
-- `r` refresh/retry
-- `/` search/filter
-- `o` provider/model override
-- `?` help
-- `q` quit
-
-## Install Check
+## Base Pattern
 
 ```bash
-xyte doctor install --format text
+xyte tui --headless --screen <screen> --format json --once --tenant <tenant-id>
 ```
 
-## Setup Screen Keys
+Supported screens:
+- `setup`
+- `config`
+- `dashboard`
+- `spaces`
+- `devices`
+- `incidents`
+- `tickets`
+- `copilot`
 
-- `a` add tenant
-- `u` set active tenant
-- `k` guided key wizard (provider -> slot -> secret -> review)
-- `p` set active slot
-- `c` connectivity test
-- `r` refresh readiness
+## Deterministic Branching (Required)
 
-## Config Screen Keys
+1. Request operational screen (for example `dashboard`).
+2. Parse last non-startup frame.
+3. If `frame.screen == "setup"` and `frame.meta.redirectedFrom` is set:
+- treat tenant/keys/setup as blocking
+- switch to setup/config remediation flow
+4. Retry requested operational screen after remediation.
 
-- `a` add key slot (guided wizard)
-- `n` rename slot
-- `u` set active slot
-- `e` update selected slot secret (guided wizard)
-- `x` remove slot (confirmation required)
-- `c` run doctor
+## Setup/Config Remediation Flow
 
-## Spaces Flow
-
-- open `Spaces` with `s`
-- select row and press `Enter` for async drilldown
-- `/` to filter spaces
-- drilldown includes selected space detail + devices in space pane
-
-## Headless Agent Commands
-
-Setup snapshot:
-
+1. Check readiness frame:
 ```bash
 xyte tui --headless --screen setup --format json --once --tenant <tenant-id>
 ```
 
-Operational snapshot (auto-redirects to setup if blocked):
+2. If missing auth, run CLI key-slot operations:
+```bash
+xyte auth key add --tenant <tenant-id> --provider xyte-org --name primary --key <value> --set-active
+xyte auth key list --tenant <tenant-id> --format json
+xyte config doctor --tenant <tenant-id> --format json
+```
 
+3. Re-request operational headless frame.
+
+## Per-Screen Headless Recipes
+
+Setup:
+```bash
+xyte tui --headless --screen setup --format json --once --tenant <tenant-id>
+```
+
+Config:
+```bash
+xyte tui --headless --screen config --format json --once --tenant <tenant-id>
+```
+
+Dashboard:
 ```bash
 xyte tui --headless --screen dashboard --format json --once --tenant <tenant-id>
 ```
 
-Streaming with reconnect metadata:
+Spaces:
+```bash
+xyte tui --headless --screen spaces --format json --once --tenant <tenant-id>
+```
+
+Devices:
+```bash
+xyte tui --headless --screen devices --format json --once --tenant <tenant-id>
+```
+
+Incidents:
+```bash
+xyte tui --headless --screen incidents --format json --once --tenant <tenant-id>
+```
+
+Tickets:
+```bash
+xyte tui --headless --screen tickets --format json --once --tenant <tenant-id>
+```
+
+Copilot snapshot:
+```bash
+xyte tui --headless --screen copilot --format json --once --tenant <tenant-id>
+```
+
+## Follow Mode (Streaming)
 
 ```bash
 xyte tui --headless --screen spaces --format json --follow --interval-ms 2000 --tenant <tenant-id>
 ```
 
-Inspect input-pipeline telemetry:
+Use `--follow` only when continuous status is needed.
 
-```bash
-xyte tui --headless --screen setup --format json --once --tenant <tenant-id> \
-  | jq '.meta | {inputState, queueDepth, droppedEvents, transitionState, refreshState, activePane, availablePanes, navigationMode}'
-```
+## Metadata Keys Agents Should Parse
 
-Text fallback:
+From `frame.meta`:
+- `readiness`
+- `connection`
+- `refreshState`
+- `renderSafety`
+- `tableFormat`
+- `activePane`
+- `availablePanes`
+- `navigationMode`
+- `tabId`
+- `tabOrder`
+- `tabNavBoundary`
+- `redirectedFrom` (when setup gate blocks)
 
+## Text Fallback
+
+When JSON parsing is unavailable:
 ```bash
 xyte tui --headless --screen config --format text --once --tenant <tenant-id>
 ```
 
-Deterministic output:
-
-```bash
-xyte tui --headless --no-motion ...
-```
-
 ## Safety Model
 
-- Copilot output is advisory only.
-- Interactive ticket resolve uses confirmation token prompt.
-- CLI mutation endpoints require `--allow-write`, and destructive calls require `--confirm`.
+- Headless frames are read-only visualization.
+- Mutations still must go through guarded CLI commands:
+  - non-read methods require `--allow-write`
+  - delete methods require `--allow-write --confirm <endpoint-key>`
