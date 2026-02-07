@@ -130,13 +130,17 @@ export async function runTuiApp(options: TuiAppOptions): Promise<void> {
   });
 
   if (options.headless) {
+    const requestedFormat = options.format ?? 'json';
+    if (requestedFormat !== 'json') {
+      throw new Error('Headless mode only supports JSON output.');
+    }
     try {
       await runHeadlessRenderer({
         client: options.client,
         profileStore,
         keychain,
         screen: options.initialScreen ?? 'dashboard',
-        format: options.format ?? 'json',
+        format: 'json',
         motionEnabled,
         follow: options.follow,
         intervalMs: options.intervalMs,

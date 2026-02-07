@@ -17,7 +17,13 @@ Production-focused TypeScript SDK + CLI + full-screen TUI for Xyte public APIs, 
 - Resilient retry/reconnect surfacing in TUI/headless metadata
 - Interactive TUI screens:
   - setup, config, dashboard, spaces, devices, incidents, tickets, copilot
-- Headless scene output for agents (`json` + `text`)
+- Headless scene output for agents (`json` NDJSON, machine-only)
+- Versioned machine contracts for:
+  - endpoint call envelope (`xyte.call.envelope.v1`)
+  - headless frames (`xyte.headless.frame.v1`)
+  - fleet inspect/deep-dive/report outputs
+- Deterministic fleet analytics + report generation (`inspect`/`report`)
+- MCP stdio server for tool-based agents (`xyte mcp serve`)
 - Pluggable LLM providers (OpenAI, Anthropic, OpenAI-compatible)
 
 ## Requirements
@@ -55,8 +61,8 @@ npm run reinstall:global
 ## First-Run Setup (Recommended)
 
 ```bash
-# Interactive setup
-xyte setup run
+# Simplest path: run bare command
+xyte
 
 # Read current readiness
 xyte setup status --format text
@@ -72,6 +78,16 @@ Non-interactive setup example:
 
 ```bash
 xyte setup run \
+  --non-interactive \
+  --tenant acme \
+  --key "$XYTE_ORG_KEY"
+```
+
+Advanced provider/slot setup (optional):
+
+```bash
+xyte setup run \
+  --advanced \
   --non-interactive \
   --tenant acme \
   --name "Acme" \
@@ -116,6 +132,9 @@ xyte auth clear-key --tenant acme --provider xyte-org
 xyte list-endpoints
 xyte describe-endpoint organization.devices.getDevices
 xyte call organization.devices.getDevices --tenant acme
+
+# agent-friendly envelope
+xyte call organization.devices.getDevices --tenant acme --output-mode envelope
 ```
 
 Mutation guard example:
@@ -227,8 +246,110 @@ xyte tui --headless --screen setup --format json --once
 xyte tui --headless --screen dashboard --format json --once
 
 # streaming mode with reconnect metadata
-xyte tui --headless --screen spaces --format text --follow --interval-ms 2000
+xyte tui --headless --screen spaces --format json --follow --interval-ms 2000
 ```
+
+Headless JSON frames now include:
+- `schemaVersion` (`xyte.headless.frame.v1`)
+- `sessionId` (stable per run)
+- `sequence` (monotonic per stream)
+- `meta.contract` (contract metadata)
+
+Canonical schemas are under `docs/schemas/`.
+`--format text` is not supported in headless mode.
+
+## Fleet Insights and Reports
+
+```bash
+# compact fleet health summary
+xyte inspect fleet --tenant acme --format ascii
+
+# deep-dive analytics
+xyte inspect deep-dive --tenant acme --window 24 --format json > /tmp/deep-dive.json
+
+# generate markdown or pdf report
+xyte report generate --tenant acme --input /tmp/deep-dive.json --out /tmp/xyte-report.pdf
+```
+
+Default output is a branded human-readable PDF (sanitized by default). Use `--format markdown` for text output and `--include-sensitive` to opt in full IDs.
+
+## Machine Structure Examples
+
+Call envelope (`xyte.call.envelope.v1`):
+
+```json
+{
+  "schemaVersion": "xyte.call.envelope.v1",
+  "requestId": "8fcf4f58-9f76-4dcb-bf6a-117a78f00ed3",
+  "tenantId": "acme",
+  "endpointKey": "organization.devices.getDevices",
+  "method": "GET",
+  "response": { "status": 200, "durationMs": 238, "retryCount": 0, "data": { "items": [] } },
+  "error": null
+}
+```
+
+Headless frame (`xyte.headless.frame.v1`):
+
+```json
+{
+  "schemaVersion": "xyte.headless.frame.v1",
+  "sessionId": "2c17c9b8-9a26-4a5d-b8f4-7302f2cb4d24",
+  "sequence": 3,
+  "screen": "dashboard",
+  "meta": { "contract": { "frameVersion": "xyte.headless.frame.v1" } }
+}
+```
+
+Fleet inspect (`xyte.inspect.fleet.v1`):
+
+```json
+{
+  "schemaVersion": "xyte.inspect.fleet.v1",
+  "tenantId": "acme",
+  "totals": { "devices": 68, "spaces": 133, "incidents": 240, "tickets": 5 },
+  "highlights": { "offlineDevices": 48, "offlinePct": 70.6, "activeIncidents": 10, "activeIncidentPct": 4.2, "openTickets": 5 }
+}
+```
+
+Deep dive (`xyte.inspect.deep-dive.v1`):
+
+```json
+{
+  "schemaVersion": "xyte.inspect.deep-dive.v1",
+  "tenantId": "acme",
+  "windowHours": 24,
+  "summary": ["Devices: 68 total, 48 offline (70.6%)."],
+  "topIncidentDevices": [{ "device": "Mac Edge Agent", "incidentCount": 145, "activeIncidents": 1 }]
+}
+```
+
+Report metadata (`xyte.report.v1`):
+
+```json
+{
+  "schemaVersion": "xyte.report.v1",
+  "tenantId": "acme",
+  "format": "pdf",
+  "outputPath": "/tmp/xyte-findings.pdf",
+  "includeSensitive": false
+}
+```
+
+## MCP Server
+
+```bash
+xyte mcp serve
+```
+
+Exposed tools:
+- `xyte_setup_status`
+- `xyte_config_doctor`
+- `xyte_list_endpoints`
+- `xyte_describe_endpoint`
+- `xyte_call`
+- `xyte_inspect_fleet`
+- `xyte_report_generate`
 
 ## LLM Provider Configuration
 

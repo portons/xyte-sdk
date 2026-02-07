@@ -1,6 +1,7 @@
 import type { TuiScreenId } from './types';
 import { safePreviewLines } from './serialize';
 import { fitCell, formatBoolTag, sanitizePrintable, shortId } from './table-format';
+import { HEADLESS_FRAME_SCHEMA_VERSION } from '../contracts/versions';
 
 export type FrameInputState = 'idle' | 'modal' | 'busy';
 export type FrameTransitionState = 'idle' | 'switching';
@@ -20,6 +21,11 @@ export interface HeadlessFrameMeta {
   tabNavBoundary?: 'left' | 'right' | null;
   renderSafety?: 'ok' | 'truncated';
   tableFormat?: 'compact-v1';
+  contract?: {
+    frameVersion: string;
+    tableFormat: string;
+    navigationMode: string;
+  };
   [key: string]: unknown;
 }
 
@@ -48,7 +54,10 @@ export interface ScenePanel {
 }
 
 export interface HeadlessFrame {
+  schemaVersion: typeof HEADLESS_FRAME_SCHEMA_VERSION;
   timestamp: string;
+  sessionId: string;
+  sequence: number;
   mode: 'headless' | 'interactive';
   screen: TuiScreenId;
   title: string;
@@ -563,6 +572,8 @@ export function sceneFromConfigState(state: ConfigSceneState): ScenePanel[] {
 }
 
 export function createHeadlessFrame(args: {
+  sessionId: string;
+  sequence: number;
   screen: TuiScreenId;
   title: string;
   status: string;
@@ -584,10 +595,18 @@ export function createHeadlessFrame(args: {
     activePane: '',
     tabNavBoundary: null,
     renderSafety: 'ok',
-    tableFormat: 'compact-v1'
+    tableFormat: 'compact-v1',
+    contract: {
+      frameVersion: HEADLESS_FRAME_SCHEMA_VERSION,
+      tableFormat: 'compact-v1',
+      navigationMode: 'pane-focus'
+    }
   };
   return {
+    schemaVersion: HEADLESS_FRAME_SCHEMA_VERSION,
     timestamp: new Date().toISOString(),
+    sessionId: args.sessionId,
+    sequence: args.sequence,
     mode: 'headless',
     screen: args.screen,
     title: args.title,

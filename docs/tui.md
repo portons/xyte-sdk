@@ -159,9 +159,10 @@ Debug log captures:
 ```bash
 xyte tui --headless --screen setup --format json --once
 xyte tui --headless --screen dashboard --format json --once
-xyte tui --headless --screen spaces --format text --follow --interval-ms 2000
+xyte tui --headless --screen spaces --format json --follow --interval-ms 2000
 ```
 
 - all visual flows are available in headless mode (`setup/config` included)
 - if operational screen requested while not ready, output auto-redirects to setup frame
 - follow mode includes reconnect/retry metadata
+- headless mode is JSON-only (`--format text` is rejected)

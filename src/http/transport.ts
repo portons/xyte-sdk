@@ -1,6 +1,8 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { XyteHttpError } from './errors';
+import { getLogger } from '../observability/logger';
+import { withSpan } from '../observability/tracing';
 
 export interface TransportOptions {
   timeoutMs?: number;
@@ -9,6 +11,7 @@ export interface TransportOptions {
 }
 
 export interface TransportRequest {
+  requestId?: string;
   endpointKey?: string;
   method: string;
   url: string;
@@ -16,6 +19,19 @@ export interface TransportRequest {
   body?: string | FormData;
   idempotent?: boolean;
   timeoutMs?: number;
+}
+
+export interface TransportMeta {
+  durationMs: number;
+  attempts: number;
+  retryCount: number;
+}
+
+export interface TransportResponse<T = unknown> {
+  status: number;
+  headers: Record<string, string>;
+  data: T;
+  meta: TransportMeta;
 }
 
 function toLowerCaseMap(headers: Headers): Record<string, string> {
@@ -54,6 +70,7 @@ export class HttpTransport {
   private readonly timeoutMs: number;
   private readonly retryAttempts: number;
   private readonly retryBackoffMs: number;
+  private readonly logger = getLogger();
 
   constructor(options: TransportOptions = {}) {
     this.timeoutMs = options.timeoutMs ?? 15_000;
@@ -61,53 +78,104 @@ export class HttpTransport {
     this.retryBackoffMs = options.retryBackoffMs ?? 250;
   }
 
-  async request<T = unknown>(request: TransportRequest): Promise<{ status: number; headers: Record<string, string>; data: T }> {
+  async request<T = unknown>(request: TransportRequest): Promise<TransportResponse<T>> {
     const idempotent = request.idempotent ?? ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS'].includes(request.method.toUpperCase());
-    const attempts = idempotent ? this.retryAttempts + 1 : 1;
+    const maxAttempts = idempotent ? this.retryAttempts + 1 : 1;
+    const started = Date.now();
+    const requestId = request.requestId ?? 'none';
 
-    let lastError: unknown;
+    return withSpan(
+      'xyte.http.request',
+      {
+        'xyte.request.id': requestId,
+        'xyte.endpoint.key': request.endpointKey ?? 'unknown',
+        'http.method': request.method,
+        'http.url': request.url,
+        'xyte.idempotent': idempotent
+      },
+      async (span) => {
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), request.timeoutMs ?? this.timeoutMs);
 
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), request.timeoutMs ?? this.timeoutMs);
+          try {
+            const response = await fetch(request.url, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body,
+              signal: controller.signal
+            });
+            clearTimeout(timeout);
 
-      try {
-        const response = await fetch(request.url, {
-          method: request.method,
-          headers: request.headers,
-          body: request.body,
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
+            const parsed = await parseResponseBody(response);
+            if (!response.ok) {
+              throw new XyteHttpError({
+                message: `HTTP ${response.status} ${response.statusText}`,
+                status: response.status,
+                statusText: response.statusText,
+                endpointKey: request.endpointKey,
+                details: parsed
+              });
+            }
 
-        const parsed = await parseResponseBody(response);
-        if (!response.ok) {
-          throw new XyteHttpError({
-            message: `HTTP ${response.status} ${response.statusText}`,
-            status: response.status,
-            statusText: response.statusText,
-            endpointKey: request.endpointKey,
-            details: parsed
-          });
+            span.setAttribute('http.status_code', response.status);
+            span.setAttribute('xyte.attempt', attempt);
+
+            const meta: TransportMeta = {
+              durationMs: Date.now() - started,
+              attempts: attempt,
+              retryCount: attempt - 1
+            };
+
+            this.logger.debug(
+              {
+                requestId,
+                endpointKey: request.endpointKey,
+                method: request.method,
+                url: request.url,
+                status: response.status,
+                attempts: attempt,
+                durationMs: meta.durationMs
+              },
+              'HTTP request completed'
+            );
+
+            return {
+              status: response.status,
+              headers: toLowerCaseMap(response.headers),
+              data: parsed as T,
+              meta
+            };
+          } catch (error) {
+            clearTimeout(timeout);
+            lastError = error;
+            const retryable = attempt < maxAttempts && shouldRetry(error);
+
+            this.logger.debug(
+              {
+                requestId,
+                endpointKey: request.endpointKey,
+                method: request.method,
+                url: request.url,
+                attempt,
+                retryable,
+                error: error instanceof Error ? error.message : String(error)
+              },
+              'HTTP request failed'
+            );
+
+            if (!retryable) {
+              throw error;
+            }
+
+            await delay(this.retryBackoffMs * attempt);
+          }
         }
 
-        return {
-          status: response.status,
-          headers: toLowerCaseMap(response.headers),
-          data: parsed as T
-        };
-      } catch (error) {
-        clearTimeout(timeout);
-        lastError = error;
-
-        if (attempt === attempts || !shouldRetry(error)) {
-          throw error;
-        }
-
-        await delay(this.retryBackoffMs * attempt);
+        span.setAttribute('xyte.attempt', maxAttempts);
+        throw lastError;
       }
-    }
-
-    throw lastError;
+    );
   }
 }

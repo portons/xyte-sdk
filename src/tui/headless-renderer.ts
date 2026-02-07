@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
 
 import { evaluateReadiness, type ReadinessCheck } from '../config/readiness';
 import type { KeychainStore } from '../secure/keychain';
@@ -38,7 +39,7 @@ export interface HeadlessRenderOptions {
   profileStore: ProfileStore;
   keychain: KeychainStore;
   screen: TuiScreenId;
-  format: 'json' | 'text';
+  format: 'json';
   motionEnabled: boolean;
   follow?: boolean;
   intervalMs?: number;
@@ -115,6 +116,8 @@ function panelToText(panel: ScenePanel): string {
 export function renderFrameAsText(frame: HeadlessFrame): string {
   const sections: string[] = [];
   sections.push(frame.logo);
+  sections.push(`Contract: ${frame.schemaVersion}`);
+  sections.push(`Session: ${frame.sessionId} #${frame.sequence}`);
   sections.push(`Screen: ${frame.screen}`);
   sections.push(`Title: ${frame.title}`);
   sections.push(`Status: ${frame.status}`);
@@ -136,6 +139,8 @@ async function resolveTenantId(profileStore: ProfileStore, explicitTenantId?: st
 }
 
 async function buildSetupFrame(args: {
+  sessionId: string;
+  sequence: number;
   readiness: ReadinessCheck;
   motionEnabled: boolean;
   motionPhase: number;
@@ -155,6 +160,8 @@ async function buildSetupFrame(args: {
     }))
   });
   return createHeadlessFrame({
+    sessionId: args.sessionId,
+    sequence: args.sequence,
     screen: 'setup',
     title: 'Setup',
     status: args.readiness.state === 'ready' ? 'Setup complete' : 'Setup required',
@@ -180,6 +187,8 @@ async function buildSetupFrame(args: {
 }
 
 async function buildConfigFrame(args: {
+  sessionId: string;
+  sequence: number;
   profileStore: ProfileStore;
   keychain: KeychainStore;
   readiness: ReadinessCheck;
@@ -218,6 +227,8 @@ async function buildConfigFrame(args: {
   });
 
   return createHeadlessFrame({
+    sessionId: args.sessionId,
+    sequence: args.sequence,
     screen: 'config',
     title: 'Config',
     status: 'Config snapshot',
@@ -242,6 +253,8 @@ async function buildConfigFrame(args: {
 }
 
 async function buildOperationalFrame(options: {
+  sessionId: string;
+  sequence: number;
   client: XyteClient;
   screen: Exclude<TuiScreenId, 'setup' | 'config'>;
   tenantId?: string;
@@ -259,6 +272,8 @@ async function buildOperationalFrame(options: {
         tickets: data.data.tickets
       });
       return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
         screen: 'dashboard',
         title: 'Dashboard',
         status: data.error ? `Dashboard ${data.connectionState}: ${data.error.message}` : 'Dashboard snapshot',
@@ -294,6 +309,8 @@ async function buildOperationalFrame(options: {
         devices: devices.data
       });
       return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
         screen: 'devices',
         title: 'Devices',
         status: devices.error ? `Devices ${devices.connectionState}: ${devices.error.message}` : 'Devices snapshot',
@@ -329,6 +346,8 @@ async function buildOperationalFrame(options: {
         severityFilter: ''
       });
       return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
         screen: 'incidents',
         title: 'Incidents',
         status: incidents.error ? `Incidents ${incidents.connectionState}: ${incidents.error.message}` : 'Incidents snapshot',
@@ -365,6 +384,8 @@ async function buildOperationalFrame(options: {
         tickets: tickets.data.tickets
       });
       return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
         screen: 'tickets',
         title: 'Tickets',
         status: tickets.error ? `Tickets ${tickets.connectionState}: ${tickets.error.message}` : 'Tickets snapshot',
@@ -421,6 +442,8 @@ async function buildOperationalFrame(options: {
         devicesInSpace
       });
       return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
         screen: 'spaces',
         title: 'Spaces',
         status: spaces.error ? `Spaces ${spaces.connectionState}: ${spaces.error.message}` : 'Spaces snapshot',
@@ -457,6 +480,8 @@ async function buildOperationalFrame(options: {
         logs: []
       });
       return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
         screen: 'copilot',
         title: 'Copilot',
         status: 'Copilot snapshot',
@@ -476,54 +501,54 @@ async function buildOperationalFrame(options: {
   }
 }
 
-function writeFrame(write: SafeWrite, format: 'json' | 'text', frame: HeadlessFrame) {
-  if (format === 'json') {
-    write(`${JSON.stringify(frame)}\n`);
-    return;
-  }
-
-  write(`${renderFrameAsText(frame)}\n`);
-  write(`${'-'.repeat(72)}\n`);
+function writeFrame(write: SafeWrite, frame: HeadlessFrame) {
+  write(`${JSON.stringify(frame)}\n`);
 }
 
-function writeStartup(write: SafeWrite, format: 'json' | 'text', motionEnabled: boolean) {
+function writeStartup(
+  write: SafeWrite,
+  _format: 'json',
+  motionEnabled: boolean,
+  sessionId: string,
+  nextSequence: () => number
+) {
   const frames = startupFrames();
-  if (format === 'json') {
-    frames.forEach((frame, index) => {
-      write(
-        `${JSON.stringify({
-          timestamp: new Date().toISOString(),
-          mode: 'headless',
-          screen: 'setup',
-          title: frame.title,
-          status: frame.status,
-          motionEnabled,
-          motionPhase: index,
-          logo: frame.banner,
-          panels: [],
-          meta: {
-            ...withNavigationMeta('setup', {
-              startup: true,
-              inputState: 'idle',
-              queueDepth: 0,
-              droppedEvents: 0,
-              transitionState: 'idle',
-              refreshState: 'idle'
-            })
-          }
-        })}\n`
-      );
+  frames.forEach((frame, index) => {
+    const startupFrame = createHeadlessFrame({
+      sessionId,
+      sequence: nextSequence(),
+      screen: 'setup',
+      title: frame.title,
+      status: frame.status,
+      motionEnabled,
+      motionPhase: index,
+      logo: frame.banner,
+      panels: [],
+      meta: {
+        ...withNavigationMeta('setup', {
+          startup: true,
+          inputState: 'idle',
+          queueDepth: 0,
+          droppedEvents: 0,
+          transitionState: 'idle',
+          refreshState: 'idle'
+        })
+      }
     });
-    return;
-  }
-
-  const last = frames[frames.length - 1];
-  write(`${last.banner}\n${last.status}\n${'-'.repeat(72)}\n`);
+    write(`${JSON.stringify(startupFrame)}\n`);
+  });
 }
 
 export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promise<void> {
   const output = options.output ?? process.stdout;
   const intervalMs = Math.max(250, options.intervalMs ?? 2000);
+  const sessionId = randomUUID();
+  let sequence = 0;
+  const nextSequence = () => {
+    const current = sequence;
+    sequence += 1;
+    return current;
+  };
   let brokenPipe = false;
   let streamError: unknown;
 
@@ -558,7 +583,11 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
     stream.on?.('error', onStreamError);
   }
 
-  writeStartup(write, options.format, options.motionEnabled);
+  if (options.format !== 'json') {
+    throw new Error('Headless renderer only supports json format.');
+  }
+
+  writeStartup(write, options.format, options.motionEnabled, sessionId, nextSequence);
 
   let phase = 0;
   let running = true;
@@ -595,6 +624,8 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
       let frame: HeadlessFrame;
       if (actualScreen === 'setup') {
         frame = await buildSetupFrame({
+          sessionId,
+          sequence: nextSequence(),
           readiness,
           motionEnabled: options.motionEnabled,
           motionPhase: phase,
@@ -602,6 +633,8 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
         });
       } else if (actualScreen === 'config') {
         frame = await buildConfigFrame({
+          sessionId,
+          sequence: nextSequence(),
           profileStore: options.profileStore,
           keychain: options.keychain,
           readiness,
@@ -611,6 +644,8 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
         });
       } else {
         frame = await buildOperationalFrame({
+          sessionId,
+          sequence: nextSequence(),
           client: options.client,
           screen: actualScreen as Exclude<TuiScreenId, 'setup' | 'config'>,
           tenantId,
@@ -620,7 +655,7 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
         });
       }
 
-      writeFrame(write, options.format, frame);
+      writeFrame(write, frame);
       if (brokenPipe) {
         break;
       }
@@ -633,6 +668,8 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
 
       if (readiness.connectivity.retriable && readiness.connectivity.state !== 'connected') {
         const retryFrame = createHeadlessFrame({
+          sessionId,
+          sequence: nextSequence(),
           screen: 'setup',
           title: 'Reconnect',
           status: `Retrying connectivity in ${intervalMs}ms`,
@@ -665,7 +702,7 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
             })
           }
         });
-        writeFrame(write, options.format, retryFrame);
+        writeFrame(write, retryFrame);
         phase += 1;
       }
 

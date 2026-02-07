@@ -1,123 +1,124 @@
-# Headless Visual Schema
+# Headless JSON Contract
 
-`xyte tui --headless` emits deterministic scene frames used by agents and automation.
+`xyte tui --headless` is machine-only and emits NDJSON (one JSON object per line).
 
 ## CLI
 
 ```bash
 xyte tui --headless \
   --screen <setup|config|dashboard|spaces|devices|incidents|tickets|copilot> \
-  --format <json|text> \
+  --format json \
   [--once|--follow --interval-ms N] \
   [--tenant <id>] \
   [--no-motion]
 ```
 
-## Setup Gating Behavior
+`--format text` is no longer supported in headless mode.
 
-If readiness is incomplete and an operational screen is requested, runtime frame redirects to setup:
-- requested: `dashboard` (or any operational screen)
-- emitted frame: `screen: "setup"`
-- metadata includes `meta.redirectedFrom`
+## Setup Gating
 
-## JSON Frame Shape
+If readiness is incomplete and an operational screen is requested, emitted runtime frame is redirected:
+- requested: `dashboard` (or other operational screen)
+- runtime frame: `screen: "setup"`
+- metadata: `meta.redirectedFrom`
 
-One JSON object per line:
+## Example: `xyte.headless.frame.v1`
 
 ```json
 {
-  "timestamp": "2026-02-06T00:00:00.000Z",
+  "schemaVersion": "xyte.headless.frame.v1",
+  "timestamp": "2026-02-07T18:22:47.129Z",
+  "sessionId": "2c17c9b8-9a26-4a5d-b8f4-7302f2cb4d24",
+  "sequence": 3,
   "mode": "headless",
-  "screen": "setup",
-  "title": "Setup",
-  "status": "Setup required",
+  "screen": "dashboard",
+  "title": "Dashboard",
+  "status": "Dashboard snapshot",
   "tenantId": "acme",
   "motionEnabled": false,
   "motionPhase": 0,
   "logo": "XYTE",
-  "panels": [
-    {
-      "id": "setup-overview",
-      "title": "Setup Readiness",
-      "kind": "stats",
-      "stats": [
-        { "label": "Readiness", "value": "needs_setup" },
-        { "label": "Tenant", "value": "acme" },
-        { "label": "Connection", "value": "missing_key" }
-      ]
-    }
-  ],
+  "panels": [],
   "meta": {
-    "readiness": "needs_setup",
-    "connection": {
-      "state": "missing_key",
-      "message": "Missing API key..."
-    },
-    "inputState": "idle",
-    "queueDepth": 0,
-    "droppedEvents": 0,
-    "transitionState": "idle",
-    "refreshState": "idle",
-    "activePane": "providers-table",
-    "availablePanes": ["providers-table", "checklist-box"],
+    "readiness": "ready",
     "navigationMode": "pane-focus",
-    "tabId": "setup",
+    "tabId": "dashboard",
     "tabOrder": ["setup", "config", "dashboard", "spaces", "devices", "incidents", "tickets", "copilot"],
-    "tabNavBoundary": null,
-    "renderSafety": "ok",
     "tableFormat": "compact-v1",
-    "blocking": true,
-    "redirectedFrom": "dashboard"
+    "contract": {
+      "frameVersion": "xyte.headless.frame.v1",
+      "tableFormat": "compact-v1",
+      "navigationMode": "pane-focus"
+    }
   }
 }
 ```
 
-## Panel Kinds
+## Example: `xyte.inspect.deep-dive.v1`
 
-- `stats`: key/value metrics
-- `table`: column+row tabular data
-- `text`: multi-line text
+```json
+{
+  "schemaVersion": "xyte.inspect.deep-dive.v1",
+  "generatedAtUtc": "2026-02-07T18:22:47.129Z",
+  "tenantId": "acme",
+  "windowHours": 24,
+  "summary": [
+    "Devices: 68 total, 48 offline (70.6%).",
+    "Incidents: 240 total, 10 active (4.2%)."
+  ],
+  "topOfflineSpaces": [
+    { "space": "Overview/New-York/Office", "offlineDevices": 31, "shareOfOfflinePct": 64.6 }
+  ],
+  "topIncidentDevices": [
+    { "device": "Mac Edge Agent", "incidentCount": 145, "activeIncidents": 1 }
+  ],
+  "activeIncidentAging": [
+    { "device": "C930e", "space": "Overview/Taipei", "ageHours": 127, "createdAtUtc": "2026-02-01T07:44:18Z" }
+  ],
+  "churn24h": {
+    "incidents": 51,
+    "devices": 3,
+    "spaces": 3,
+    "bySpace": [
+      { "space": "Overview/Tel-Aviv", "incidents": 34 }
+    ],
+    "byDevice": [
+      { "device": "Mac Edge Agent", "incidents": 34 }
+    ]
+  },
+  "ticketPosture": {
+    "openTickets": 5,
+    "overlappingActiveIncidentDevices": 1,
+    "oldestOpenTickets": []
+  },
+  "dataQuality": {
+    "statusMismatches": []
+  }
+}
+```
 
-## Meta Contract
+## Example: `xyte.report.v1`
 
-`meta` includes standardized diagnostics:
-- `readiness`: `ready | needs_setup | degraded`
-- `connection`: connectivity object/state/message
-- `retry`: attempts/backoff metadata when retries occurred
-- `blocking`: whether setup gate currently blocks operational views
-- `redirectedFrom`: requested screen when redirected to setup
-- `inputState`: `idle | modal | busy`
-- `queueDepth`: queued event count
-- `droppedEvents`: total dropped events due to queue backpressure
-- `transitionState`: `idle | switching`
-- `refreshState`: `idle | loading | retrying | error`
-- `activePane`: currently active pane id for the screen
-- `availablePanes`: ordered pane ids for screen-level arrow navigation
-- `navigationMode`: currently `pane-focus`
-- `tabId`: currently active tab/screen id
-- `tabOrder`: deterministic tab sequence used by arrow-boundary tab navigation
-- `tabNavBoundary`: boundary direction (`left|right`) when relevant, otherwise `null`
-- `renderSafety`: `ok | truncated`, indicates whether payload previews were truncated for stability
-- `tableFormat`: currently `compact-v1` (same compact rows used by interactive TUI)
+```json
+{
+  "schemaVersion": "xyte.report.v1",
+  "generatedAtUtc": "2026-02-07T18:22:47.129Z",
+  "tenantId": "acme",
+  "format": "pdf",
+  "outputPath": "/tmp/xyte-findings.pdf",
+  "includeSensitive": false
+}
+```
 
-## Startup Frames
+## Copy/Paste Recipes
 
-Startup frames are emitted before runtime frames:
-- `meta.startup = true`
-- no operational panels
-- useful for detecting initialization boundaries
+```bash
+# Headless one-shot snapshot
+xyte tui --headless --screen dashboard --format json --once --tenant acme
 
-## Follow Mode and Reconnect
+# Deep-dive JSON for automation
+xyte inspect deep-dive --tenant acme --window 24 --format json > /tmp/deep-dive.json
 
-In `--follow`, transient connectivity issues keep streaming:
-- runtime frames continue
-- reconnect status frames are emitted with retry metadata
-- no write/mutation actions are executed in headless mode
-
-## Text Mode
-
-`--format text` renders equivalent frame content with:
-- logo
-- screen/title/status
-- tenant/motion info
-- panel sections
+# Branded PDF report (default format)
+xyte report generate --tenant acme --input /tmp/deep-dive.json --out /tmp/xyte-findings.pdf
+```

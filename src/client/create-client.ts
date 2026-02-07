@@ -8,7 +8,7 @@ import { createKeychainStore, type KeychainStore } from '../secure/keychain';
 import { FileProfileStore, type ProfileStore } from '../secure/profile-store';
 import type { PublicEndpointSpec } from '../types/endpoints';
 import type { SecretProvider } from '../types/profile';
-import type { XyteCallArgs, XyteClient, XyteClientOptions } from '../types/client';
+import type { XyteCallArgs, XyteCallResult, XyteClient, XyteClientOptions } from '../types/client';
 
 const DEFAULT_HUB_BASE_URL = 'https://hub.xyte.io';
 const DEFAULT_ENTRY_BASE_URL = 'https://entry.xyte.io';
@@ -155,7 +155,7 @@ export function createXyteClient(options: XyteClientOptions = {}): XyteClient {
     return value;
   };
 
-  const call = async <T = unknown>(endpointKey: string, args: XyteCallArgs = {}): Promise<T> => {
+  const callWithMeta = async <T = unknown>(endpointKey: string, args: XyteCallArgs = {}): Promise<XyteCallResult<T>> => {
     const endpoint = getEndpoint(endpointKey);
     const { tenantId, tenant } = await resolveTenant(args.tenantId);
     const baseUrl = endpoint.base === 'entry'
@@ -201,6 +201,7 @@ export function createXyteClient(options: XyteClientOptions = {}): XyteClient {
     }
 
     const response = await transport.request<T>({
+      requestId: args.requestId,
       endpointKey: endpoint.key,
       method: endpoint.method,
       url: url.toString(),
@@ -209,7 +210,19 @@ export function createXyteClient(options: XyteClientOptions = {}): XyteClient {
       idempotent: ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS'].includes(endpoint.method)
     });
 
-    return response.data;
+    return {
+      status: response.status,
+      headers: response.headers,
+      data: response.data,
+      durationMs: response.meta?.durationMs ?? 0,
+      retryCount: response.meta?.retryCount ?? 0,
+      attempts: response.meta?.attempts ?? 1
+    };
+  };
+
+  const call = async <T = unknown>(endpointKey: string, args: XyteCallArgs = {}): Promise<T> => {
+    const result = await callWithMeta<T>(endpointKey, args);
+    return result.data;
   };
 
   return {
@@ -217,6 +230,7 @@ export function createXyteClient(options: XyteClientOptions = {}): XyteClient {
     organization: createOrganizationNamespace(call),
     partner: createPartnerNamespace(call),
     call,
+    callWithMeta,
     describeEndpoint: (key) => getEndpoint(key),
     listEndpoints: () => listEndpoints(),
     listTenantEndpoints: async (tenantId: string) => {

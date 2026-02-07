@@ -6,6 +6,7 @@ import { MemoryKeychain } from '../../src/secure/keychain';
 import { SCREEN_PANE_CONFIG } from '../../src/tui/panes';
 import type { TuiScreenId } from '../../src/tui/types';
 import { MemoryProfileStore } from '../support/memory-profile-store';
+import { HEADLESS_FRAME_SCHEMA_VERSION } from '../../src/contracts/versions';
 
 function parseRuntimeFrame(chunks: string[]): (HeadlessFrame & { meta?: Record<string, unknown> }) | undefined {
   const parsed = chunks
@@ -70,6 +71,9 @@ describe('headless renderer', () => {
 
     const runtimeFrame = parseRuntimeFrame(chunks);
     expect(runtimeFrame).toBeDefined();
+    expect(runtimeFrame?.schemaVersion).toBe(HEADLESS_FRAME_SCHEMA_VERSION);
+    expect(typeof runtimeFrame?.sessionId).toBe('string');
+    expect(typeof runtimeFrame?.sequence).toBe('number');
     expect(runtimeFrame?.screen).toBe('spaces');
     expect(runtimeFrame?.motionEnabled).toBe(false);
     expect(Array.isArray(runtimeFrame?.panels)).toBe(true);
@@ -85,11 +89,15 @@ describe('headless renderer', () => {
     expect((runtimeFrame?.meta as any)?.tabNavBoundary).toBeNull();
     expect((runtimeFrame?.meta as any)?.renderSafety).toBeDefined();
     expect((runtimeFrame?.meta as any)?.tableFormat).toBe('compact-v1');
+    expect((runtimeFrame?.meta as any)?.contract?.frameVersion).toBe(HEADLESS_FRAME_SCHEMA_VERSION);
   });
 
   it('renders text frames with logo and panel sections', () => {
     const text = renderFrameAsText({
+      schemaVersion: HEADLESS_FRAME_SCHEMA_VERSION,
       timestamp: new Date().toISOString(),
+      sessionId: 'sess-1',
+      sequence: 0,
       mode: 'headless',
       screen: 'dashboard',
       title: 'Dashboard',
@@ -243,6 +251,7 @@ describe('headless renderer', () => {
 
       const runtimeFrame = parseRuntimeFrame(chunks);
       expect(runtimeFrame).toBeDefined();
+      expect(runtimeFrame?.schemaVersion).toBe(HEADLESS_FRAME_SCHEMA_VERSION);
       expect(runtimeFrame?.screen).toBe(screen);
       expect((runtimeFrame?.meta as any)?.navigationMode).toBe('pane-focus');
       expect((runtimeFrame?.meta as any)?.activePane).toBe(SCREEN_PANE_CONFIG[screen].defaultPane);

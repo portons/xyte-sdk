@@ -30,6 +30,9 @@ describe('http transport', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(response.data.ok).toBe(true);
+    expect(response.meta.attempts).toBe(2);
+    expect(response.meta.retryCount).toBe(1);
+    expect(response.meta.durationMs).toBeGreaterThanOrEqual(0);
   });
 
   it('does not retry non-idempotent requests', async () => {

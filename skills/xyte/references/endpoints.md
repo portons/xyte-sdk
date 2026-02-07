@@ -18,6 +18,7 @@ xyte describe-endpoint <endpoint-key>
 ```bash
 xyte call <endpoint-key> \
   --tenant <tenant-id> \
+  --output-mode envelope \
   --path-json '{"id":"..."}' \
   --query-json '{"page":1}' \
   --body-json '{"field":"value"}'
@@ -93,6 +94,7 @@ Device:
 ## Multi-tenant Determinism
 
 - Always pass `--tenant <tenant-id>` for automation.
+- Prefer `--output-mode envelope` for machine loops to capture request/guard/retry metadata.
 - Use `xyte tenant use <tenant-id>` only for interactive/default context.
 - Keep auth explicit with named slots:
   - `xyte auth key list --tenant <tenant-id> --format json`

@@ -11,7 +11,10 @@ xyte tui --headless --screen <screen> --format json --once --tenant <tenant-id>
 Each line is one JSON frame.
 
 Required top-level fields:
+- `schemaVersion` (`"xyte.headless.frame.v1"`)
 - `timestamp` (ISO string)
+- `sessionId` (stable per run)
+- `sequence` (monotonic per run)
 - `mode` (`"headless"`)
 - `screen` (screen id)
 - `title` (string)
@@ -47,6 +50,9 @@ Runtime frame selection rule:
 - `tabNavBoundary`: `left | right | null`
 - `renderSafety`: `ok | truncated`
 - `tableFormat`: `compact-v1`
+- `contract.frameVersion`: `xyte.headless.frame.v1`
+- `contract.tableFormat`: `compact-v1`
+- `contract.navigationMode`: `pane-focus`
 
 Common optional keys:
 - `readiness`
@@ -84,3 +90,7 @@ By kind:
 - `meta.renderSafety == "truncated"` means payload preview was safely truncated.
 - Do not assume full raw object data is present in text panels.
 - Use direct CLI endpoint calls when complete raw payload is required.
+
+## JSON Schema
+
+- Canonical schema: `/Users/porton/Projects/xyte-sdk/docs/schemas/headless-frame.v1.schema.json`

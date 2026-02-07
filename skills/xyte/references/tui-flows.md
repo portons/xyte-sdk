@@ -95,6 +95,11 @@ Use `--follow` only when continuous status is needed.
 
 ## Metadata Keys Agents Should Parse
 
+From top-level frame:
+- `schemaVersion` (expect `xyte.headless.frame.v1`)
+- `sessionId` (stable for one run)
+- `sequence` (monotonic ordering key in `--follow`)
+
 From `frame.meta`:
 - `readiness`
 - `connection`
@@ -108,12 +113,15 @@ From `frame.meta`:
 - `tabOrder`
 - `tabNavBoundary`
 - `redirectedFrom` (when setup gate blocks)
+- `contract.frameVersion`
+- `contract.tableFormat`
+- `contract.navigationMode`
 
-## Text Fallback
+## Output Mode
 
-When JSON parsing is unavailable:
+Headless is JSON-only. Always parse NDJSON frames:
 ```bash
-xyte tui --headless --screen config --format text --once --tenant <tenant-id>
+xyte tui --headless --screen config --format json --once --tenant <tenant-id>
 ```
 
 ## Safety Model

@@ -63,7 +63,7 @@ export async function evaluateReadiness(options: ReadinessOptions): Promise<Read
 
   if (!tenantId) {
     missingItems.push('No active tenant is configured.');
-    recommendedActions.push('Run "xyte tenant add <tenant-id>" and "xyte tenant use <tenant-id>".');
+    recommendedActions.push('Run "xyte" for guided first-run setup, or "xyte setup run --non-interactive --tenant default --key <value>".');
     return {
       state: 'needs_setup',
       missingItems,
@@ -77,7 +77,7 @@ export async function evaluateReadiness(options: ReadinessOptions): Promise<Read
   const tenant = await options.profileStore.getTenant(tenantId);
   if (!tenant) {
     missingItems.push(`Active tenant "${tenantId}" does not exist in profile.`);
-    recommendedActions.push('Run "xyte tenant add <tenant-id>" and set it active.');
+    recommendedActions.push('Run "xyte setup run" (or "xyte" in a TTY) to recreate the active tenant profile.');
     return {
       state: 'needs_setup',
       tenantId,
@@ -121,7 +121,7 @@ export async function evaluateReadiness(options: ReadinessOptions): Promise<Read
   const hasXyteCredential = providers.some((provider) => XYTE_PROVIDERS.includes(provider.provider) && provider.hasActiveSecret);
   if (!hasXyteCredential) {
     missingItems.push('No active Xyte API key slot is configured (xyte-org / xyte-partner / xyte-device).');
-    recommendedActions.push('Run "xyte auth key add --tenant <tenant-id> --provider xyte-org --name primary --key <value> --set-active".');
+    recommendedActions.push('Run "xyte" for guided setup, or "xyte setup run --tenant <tenant-id> --key <value>".');
   }
 
   let connectivity = defaultConnectivity();

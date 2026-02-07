@@ -1,44 +1,47 @@
 # Setup Guide
 
-`xyte` now enforces setup readiness for TUI/headless operational views.
+`xyte` now prioritizes a simple first-run path:
 
-## Readiness Rules
+1. install
+2. run `xyte`
+3. paste XYTE API key
+4. see dashboard data
 
-Readiness is `ready` when:
-1. active tenant exists
-2. at least one active Xyte key slot has a stored secret (`xyte-org` or `xyte-partner` or `xyte-device`)
-
-Readiness states:
-- `ready`
-- `needs_setup`
-- `degraded` (transient network/rate/timeout issues)
-
-## Commands
-
-Global install (from repo checkout):
+## Quick Start
 
 ```bash
 npm run install:global
-xyte --help
+xyte
 ```
 
-Read current readiness:
+What bare `xyte` does:
+- checks readiness
+- if already ready: opens dashboard
+- if not ready: asks for XYTE API key and optional tenant label (default `default`), validates connectivity, then opens dashboard
+
+## Non-Interactive Environments
+
+If setup is missing and no TTY is available, `xyte` exits with a one-line remediation:
 
 ```bash
-xyte setup status --format text
-xyte setup status --format json
+xyte setup run --non-interactive --tenant default --key "$XYTE_SDK_KEY"
 ```
 
-Run setup (interactive):
+## Setup Commands
+
+Simplified setup (default):
 
 ```bash
 xyte setup run
+xyte setup run --non-interactive --tenant acme --key "$XYTE_ORG_KEY"
 ```
 
-Run setup (non-interactive):
+Advanced setup (provider/slot controls):
 
 ```bash
+xyte setup run --advanced
 xyte setup run \
+  --advanced \
   --non-interactive \
   --tenant acme \
   --name "Acme" \
@@ -47,27 +50,68 @@ xyte setup run \
   --key "$XYTE_ORG_KEY"
 ```
 
-Diagnostics:
+Readiness and diagnostics:
 
 ```bash
+xyte setup status --format text
+xyte setup status --format json
 xyte config doctor --format text
 xyte doctor install --format text
 ```
 
-## Key Slot Model
+## Data Structure Examples
 
-- slots are tenant-scoped and provider-scoped
-- each provider has one active slot
-- slot metadata is stored in profile (`slotId`, `name`, `fingerprint`, validation time)
-- slot secrets are stored in OS keychain (never in profile JSON)
+Call envelope (`xyte.call.envelope.v1`):
 
-## Compatibility
-
-Legacy commands still work:
-
-```bash
-xyte auth set-key ...
-xyte auth clear-key ...
+```json
+{
+  "schemaVersion": "xyte.call.envelope.v1",
+  "requestId": "8fcf4f58-9f76-4dcb-bf6a-117a78f00ed3",
+  "timestamp": "2026-02-07T18:22:47.129Z",
+  "tenantId": "acme",
+  "endpointKey": "organization.devices.getDevices",
+  "method": "GET",
+  "guard": {
+    "allowWrite": false,
+    "confirm": null,
+    "destructive": false
+  },
+  "request": {
+    "path": {},
+    "query": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "durationMs": 238,
+    "retryCount": 0,
+    "data": {
+      "items": []
+    }
+  },
+  "error": null
+}
 ```
 
-They map to slot `default` and emit deprecation warnings.
+Inspect fleet (`xyte.inspect.fleet.v1`):
+
+```json
+{
+  "schemaVersion": "xyte.inspect.fleet.v1",
+  "generatedAtUtc": "2026-02-07T18:22:47.129Z",
+  "tenantId": "acme",
+  "totals": {
+    "devices": 68,
+    "spaces": 133,
+    "incidents": 240,
+    "tickets": 5
+  },
+  "highlights": {
+    "offlineDevices": 48,
+    "offlinePct": 70.6,
+    "activeIncidents": 10,
+    "activeIncidentPct": 4.2,
+    "openTickets": 5
+  }
+}
+```

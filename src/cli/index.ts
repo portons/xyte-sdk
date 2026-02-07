@@ -1,21 +1,35 @@
 import { createInterface } from 'node:readline/promises';
-import { accessSync, constants, existsSync, realpathSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync, realpathSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { Command } from 'commander';
 
 import { createXyteClient } from '../client/create-client';
 import { getEndpoint, listEndpoints } from '../client/catalog';
+import { buildCallEnvelope } from '../contracts/call-envelope';
+import { toProblemDetails } from '../contracts/problem';
 import { evaluateReadiness, type ReadinessCheck } from '../config/readiness';
 import { createKeychainStore, type KeychainStore } from '../secure/keychain';
 import { DEFAULT_SLOT_ID, makeKeyFingerprint, matchesSlotRef } from '../secure/key-slots';
 import { FileProfileStore, type ProfileStore } from '../secure/profile-store';
 import type { SecretProvider } from '../types/profile';
 import { parseJsonObject } from '../utils/json';
+import { writeJsonLine } from '../utils/json-output';
 import { runTuiApp } from '../tui/app';
 import { LLMService } from '../llm/provider';
 import type { TuiScreenId } from '../tui/types';
+import {
+  buildDeepDive,
+  buildFleetInspect,
+  collectFleetSnapshot,
+  formatDeepDiveAscii,
+  formatDeepDiveMarkdown,
+  formatFleetInspectAscii,
+  generateFleetReport
+} from '../workflows/fleet-insights';
+import { createMcpServer } from '../mcp/server';
 
 type OutputStream = Pick<typeof process.stdout, 'write'>;
 type ErrorStream = Pick<typeof process.stderr, 'write'>;
@@ -51,8 +65,12 @@ interface SlotView {
   lastValidatedAt?: string;
 }
 
-function printJson(stream: OutputStream, value: unknown) {
-  stream.write(`${JSON.stringify(value, null, 2)}\n`);
+const SIMPLE_SETUP_PROVIDER: SecretProvider = 'xyte-org';
+const SIMPLE_SETUP_SLOT_NAME = 'primary';
+const SIMPLE_SETUP_DEFAULT_TENANT = 'default';
+
+function printJson(stream: OutputStream, value: unknown, options: { strictJson?: boolean } = {}) {
+  writeJsonLine(stream, value, { strictJson: options.strictJson });
 }
 
 function parseProvider(value: string): SecretProvider {
@@ -233,6 +251,17 @@ async function promptValue(args: { question: string; initial?: string; stdout: O
   }
 }
 
+function normalizeTenantId(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return normalized || SIMPLE_SETUP_DEFAULT_TENANT;
+}
+
 async function resolveSlotByRef(
   profileStore: ProfileStore,
   tenantId: string,
@@ -384,8 +413,118 @@ export function createCli(runtime: CliRuntime = {}): Command {
     });
   };
 
+  const runSimpleSetup = async (args: {
+    tenantId: string;
+    tenantName: string;
+    keyValue: string;
+    setActive?: boolean;
+  }) => {
+    await profileStore.upsertTenant({
+      id: args.tenantId,
+      name: args.tenantName
+    });
+    await profileStore.setActiveTenant(args.tenantId);
+
+    const keychain = await getKeychain();
+    const slots = await profileStore.listKeySlots(args.tenantId, SIMPLE_SETUP_PROVIDER);
+    const existing = slots.find((slot) => slot.name.toLowerCase() === SIMPLE_SETUP_SLOT_NAME);
+
+    const slot = existing
+      ? await profileStore.updateKeySlot(args.tenantId, SIMPLE_SETUP_PROVIDER, existing.slotId, {
+          fingerprint: makeKeyFingerprint(args.keyValue)
+        })
+      : await profileStore.addKeySlot(args.tenantId, {
+          provider: SIMPLE_SETUP_PROVIDER,
+          name: SIMPLE_SETUP_SLOT_NAME,
+          fingerprint: makeKeyFingerprint(args.keyValue)
+        });
+
+    await keychain.setSlotSecret(args.tenantId, SIMPLE_SETUP_PROVIDER, slot.slotId, args.keyValue);
+    if (args.setActive !== false) {
+      await profileStore.setActiveKeySlot(args.tenantId, SIMPLE_SETUP_PROVIDER, slot.slotId);
+    }
+
+    const client = await withClient(args.tenantId);
+    const readiness = await evaluateReadiness({
+      profileStore,
+      keychain,
+      tenantId: args.tenantId,
+      client,
+      checkConnectivity: true
+    });
+
+    return {
+      tenantId: args.tenantId,
+      provider: SIMPLE_SETUP_PROVIDER,
+      slot,
+      readiness
+    };
+  };
+
   const program = new Command();
   program.name('xyte').description('Xyte SDK CLI + TUI').version('0.1.0');
+  program.option('--error-format <format>', 'text|json', 'text');
+  program.action(async () => {
+    const keychain = await getKeychain();
+    const readinessClient = await withClient(undefined);
+    const readiness = await evaluateReadiness({
+      profileStore,
+      keychain,
+      client: readinessClient,
+      checkConnectivity: true
+    });
+
+    if (readiness.state !== 'ready') {
+      if (!process.stdin.isTTY) {
+        throw new Error('Setup required. Run: xyte setup run --non-interactive --tenant default --key "$XYTE_SDK_KEY".');
+      }
+
+      const apiKey = await promptValue({ question: 'XYTE API key', stdout });
+      if (!apiKey.trim()) {
+        throw new Error('API key is required to complete first-run setup.');
+      }
+
+      const tenantLabelInput = await promptValue({
+        question: 'Tenant label (optional)',
+        initial: SIMPLE_SETUP_DEFAULT_TENANT,
+        stdout
+      });
+      const tenantLabel = tenantLabelInput.trim() || SIMPLE_SETUP_DEFAULT_TENANT;
+      const tenantId = normalizeTenantId(tenantLabel);
+
+      const setupResult = await runSimpleSetup({
+        tenantId,
+        tenantName: tenantLabel,
+        keyValue: apiKey.trim(),
+        setActive: true
+      });
+
+      if (setupResult.readiness.state !== 'ready') {
+        throw new Error(
+          `Setup did not complete: ${setupResult.readiness.connectivity.message || 'connectivity validation failed'}`
+        );
+      }
+    }
+
+    const activeTenantId = readiness.tenantId ?? (await profileStore.getData()).activeTenantId;
+    const keychainReady = await getKeychain();
+    const client = createXyteClient({
+      profileStore,
+      keychain: keychainReady,
+      tenantId: activeTenantId
+    });
+    const llmService = new LLMService({ profileStore, keychain: keychainReady });
+
+    await runTui({
+      client,
+      llm: llmService,
+      profileStore,
+      keychain: keychainReady,
+      initialScreen: 'dashboard',
+      headless: false,
+      tenantId: activeTenantId
+    });
+  });
 
   const doctor = program.command('doctor').description('Runtime diagnostics');
 
@@ -446,27 +585,207 @@ export function createCli(runtime: CliRuntime = {}): Command {
     .option('--body-json <json>', 'Body JSON object')
     .option('--allow-write', 'Allow mutation endpoint invocation')
     .option('--confirm <token>', 'Confirm token required for destructive operations')
+    .option('--output-mode <mode>', 'raw|envelope', 'raw')
+    .option('--strict-json', 'Fail on non-serializable output')
     .action(async (key: string, options: Record<string, unknown>) => {
       const endpoint = getEndpoint(key);
       const method = endpoint.method.toUpperCase();
+      const outputMode = String(options.outputMode ?? 'raw');
+      if (!['raw', 'envelope'].includes(outputMode)) {
+        throw new Error(`Invalid output mode: ${outputMode}. Use raw|envelope.`);
+      }
+      const requestId = randomUUID();
+      const tenantId = options.tenant as string | undefined;
+      const path = parsePathJson(options.pathJson as string | undefined);
+      const query = parseQueryJson(options.queryJson as string | undefined);
+      const body = options.bodyJson ? JSON.parse(String(options.bodyJson)) : undefined;
+      const allowWrite = options.allowWrite === true;
+      const confirmToken = options.confirm as string | undefined;
+      const strictJson = options.strictJson === true;
 
-      if (requiresWriteGuard(method) && options.allowWrite !== true) {
-        throw new Error(`Endpoint ${key} is a write operation (${method}). Re-run with --allow-write.`);
+      try {
+        if (requiresWriteGuard(method) && !allowWrite) {
+          throw new Error(`Endpoint ${key} is a write operation (${method}). Re-run with --allow-write.`);
+        }
+
+        if (requiresDestructiveGuard(method) && confirmToken !== key) {
+          throw new Error(`Endpoint ${key} is destructive. Re-run with --confirm ${key}.`);
+        }
+
+        const client = await withClient(tenantId);
+        const result = await client.callWithMeta(key, {
+          requestId,
+          tenantId,
+          path,
+          query,
+          body
+        });
+
+        if (outputMode === 'envelope') {
+          const envelope = buildCallEnvelope({
+            requestId,
+            tenantId,
+            endpointKey: key,
+            method,
+            guard: {
+              allowWrite,
+              confirm: confirmToken
+            },
+            request: {
+              path,
+              query,
+              body
+            },
+            response: {
+              status: result.status,
+              durationMs: result.durationMs,
+              retryCount: result.retryCount,
+              data: result.data
+            }
+          });
+          printJson(stdout, envelope, { strictJson });
+          return;
+        }
+
+        printJson(stdout, result.data, { strictJson });
+      } catch (error) {
+        if (outputMode !== 'envelope') {
+          throw error;
+        }
+
+        const envelope = buildCallEnvelope({
+          requestId,
+          tenantId,
+          endpointKey: key,
+          method,
+          guard: {
+            allowWrite,
+            confirm: confirmToken
+          },
+          request: {
+            path,
+            query,
+            body
+          },
+          error: toProblemDetails(error, `/call/${key}`)
+        });
+        printJson(stdout, envelope, { strictJson });
+        process.exitCode = 1;
+      }
+    });
+
+  const inspect = program.command('inspect').description('Deterministic fleet insights');
+
+  inspect
+    .command('fleet')
+    .description('Build a fleet summary snapshot')
+    .requiredOption('--tenant <tenantId>', 'Tenant id')
+    .option('--format <format>', 'json|ascii', 'json')
+    .option('--strict-json', 'Fail on non-serializable output')
+    .action(async (options: { tenant: string; format?: string; strictJson?: boolean }) => {
+      const format = options.format ?? 'json';
+      if (!['json', 'ascii'].includes(format)) {
+        throw new Error(`Invalid format: ${format}. Use json|ascii.`);
+      }
+      const client = await withClient(options.tenant);
+      const snapshot = await collectFleetSnapshot(client, options.tenant);
+      const result = buildFleetInspect(snapshot);
+
+      if (format === 'ascii') {
+        stdout.write(`${formatFleetInspectAscii(result)}\n`);
+        return;
       }
 
-      if (requiresDestructiveGuard(method) && options.confirm !== key) {
-        throw new Error(`Endpoint ${key} is destructive. Re-run with --confirm ${key}.`);
-      }
+      printJson(stdout, result, { strictJson: options.strictJson });
+    });
 
-      const client = await withClient((options.tenant as string | undefined) ?? undefined);
-      const result = await client.call(key, {
-        tenantId: options.tenant as string | undefined,
-        path: parsePathJson(options.pathJson as string | undefined),
-        query: parseQueryJson(options.queryJson as string | undefined),
-        body: options.bodyJson ? JSON.parse(String(options.bodyJson)) : undefined
+  inspect
+    .command('deep-dive')
+    .description('Build deep-dive operational analytics')
+    .requiredOption('--tenant <tenantId>', 'Tenant id')
+    .option('--window <hours>', 'Window in hours', '24')
+    .option('--format <format>', 'json|ascii|markdown', 'json')
+    .option('--strict-json', 'Fail on non-serializable output')
+    .action(async (options: { tenant: string; window?: string; format?: string; strictJson?: boolean }) => {
+      const format = options.format ?? 'json';
+      if (!['json', 'ascii', 'markdown'].includes(format)) {
+        throw new Error(`Invalid format: ${format}. Use json|ascii|markdown.`);
+      }
+      const windowHours = Number.parseInt(options.window ?? '24', 10);
+      const client = await withClient(options.tenant);
+      const snapshot = await collectFleetSnapshot(client, options.tenant);
+      const result = buildDeepDive(snapshot, Number.isFinite(windowHours) ? windowHours : 24);
+
+      if (format === 'ascii') {
+        stdout.write(`${formatDeepDiveAscii(result)}\n`);
+        return;
+      }
+      if (format === 'markdown') {
+        stdout.write(`${formatDeepDiveMarkdown(result, false)}\n`);
+        return;
+      }
+      printJson(stdout, result, { strictJson: options.strictJson });
+    });
+
+  const report = program.command('report').description('Generate fleet findings reports');
+
+  report
+    .command('generate')
+    .description('Generate report from deep-dive JSON input')
+    .requiredOption('--tenant <tenantId>', 'Tenant id')
+    .requiredOption('--input <path>', 'Path to deep-dive JSON input')
+    .requiredOption('--out <path>', 'Output path')
+    .option('--format <format>', 'markdown|pdf', 'pdf')
+    .option('--include-sensitive', 'Include full ticket/device IDs in report')
+    .option('--strict-json', 'Fail on non-serializable output')
+    .action(
+      async (options: {
+        tenant: string;
+        input: string;
+        out: string;
+        format?: 'markdown' | 'pdf';
+        includeSensitive?: boolean;
+        strictJson?: boolean;
+      }) => {
+        const raw = JSON.parse(readFileSync(path.resolve(options.input), 'utf8')) as {
+          schemaVersion?: string;
+          tenantId?: string;
+          windowHours?: number;
+        };
+        const format = options.format ?? 'pdf';
+        if (!['markdown', 'pdf'].includes(format)) {
+          throw new Error(`Invalid format: ${format}. Use markdown|pdf.`);
+        }
+
+        if (raw.schemaVersion !== 'xyte.inspect.deep-dive.v1') {
+          throw new Error('Input JSON must be produced by `xyte inspect deep-dive --format json`.');
+        }
+
+        if (raw.tenantId && raw.tenantId !== options.tenant) {
+          throw new Error(`Input tenant mismatch. Expected ${options.tenant}, got ${raw.tenantId}.`);
+        }
+
+        const generated = await generateFleetReport({
+          deepDive: raw as any,
+          format: format as 'markdown' | 'pdf',
+          outPath: options.out,
+          includeSensitive: options.includeSensitive === true
+        });
+        printJson(stdout, generated, { strictJson: options.strictJson });
+      }
+    );
+
+  const mcp = program.command('mcp').description('Model Context Protocol tools');
+  mcp
+    .command('serve')
+    .description('Run MCP server over stdio')
+    .action(async () => {
+      const keychain = await getKeychain();
+      const server = createMcpServer({
+        profileStore,
+        keychain
       });
-
-      printJson(stdout, result);
+      await server.start();
     });
 
   const tenant = program.command('tenant').description('Manage tenant profiles');
@@ -806,9 +1125,10 @@ export function createCli(runtime: CliRuntime = {}): Command {
 
   setup
     .command('run')
-    .description('Run setup flow')
+    .description('Run setup flow (simple first-run by default, advanced with --advanced)')
     .option('--tenant <tenantId>', 'Tenant id')
     .option('--name <name>', 'Tenant display name')
+    .option('--advanced', 'Use advanced provider/slot prompts')
     .option('--provider <provider>', 'Primary provider for key setup')
     .option('--slot-name <name>', 'Key slot name', 'primary')
     .option('--key <value>', 'API key value')
@@ -819,6 +1139,7 @@ export function createCli(runtime: CliRuntime = {}): Command {
       async (options: {
         tenant?: string;
         name?: string;
+        advanced?: boolean;
         provider?: string;
         slotName?: string;
         key?: string;
@@ -826,6 +1147,47 @@ export function createCli(runtime: CliRuntime = {}): Command {
         nonInteractive?: boolean;
         format?: OutputFormat;
       }) => {
+        if (!options.nonInteractive && !process.stdin.isTTY) {
+          throw new Error('Interactive setup requires a TTY. Use --non-interactive with explicit flags.');
+        }
+
+        const advanced = options.advanced === true;
+        if (!advanced) {
+          let tenantLabel = (options.name ?? options.tenant ?? SIMPLE_SETUP_DEFAULT_TENANT).trim() || SIMPLE_SETUP_DEFAULT_TENANT;
+          let keyValue = options.key ?? process.env.XYTE_SDK_KEY;
+
+          if (!options.nonInteractive) {
+            keyValue = keyValue || (await promptValue({ question: 'XYTE API key', stdout }));
+            tenantLabel =
+              (await promptValue({
+                question: 'Tenant label (optional)',
+                initial: tenantLabel,
+                stdout
+              })) || tenantLabel;
+          }
+
+          if (!keyValue) {
+            throw new Error('Missing API key. Provide --key/XYTE_SDK_KEY (or run interactive setup).');
+          }
+
+          const tenantId = normalizeTenantId(options.tenant?.trim() || tenantLabel);
+          const tenantName = tenantLabel.trim() || tenantId;
+          const setupResult = await runSimpleSetup({
+            tenantId,
+            tenantName,
+            keyValue,
+            setActive: options.setActive !== false
+          });
+
+          if ((options.format ?? 'json') === 'text') {
+            stdout.write(formatReadinessText(setupResult.readiness));
+            return;
+          }
+
+          printJson(stdout, setupResult);
+          return;
+        }
+
         let tenantId = options.tenant;
         let tenantName = options.name;
         let provider = options.provider ? parseProvider(options.provider) : undefined;
@@ -833,9 +1195,6 @@ export function createCli(runtime: CliRuntime = {}): Command {
         let keyValue = options.key ?? process.env.XYTE_SDK_KEY;
 
         if (!options.nonInteractive) {
-          if (!process.stdin.isTTY) {
-            throw new Error('Interactive setup requires a TTY. Use --non-interactive with explicit flags.');
-          }
           tenantId = tenantId || (await promptValue({ question: 'Tenant id', stdout }));
           tenantName = tenantName || (await promptValue({ question: 'Tenant display name', initial: tenantId, stdout }));
           const providerAnswer = provider || parseProvider(await promptValue({ question: 'Provider', initial: 'xyte-org', stdout }));
@@ -950,7 +1309,7 @@ export function createCli(runtime: CliRuntime = {}): Command {
     .description('Launch the full-screen TUI')
     .option('--headless', 'Run headless visual mode for agents')
     .option('--screen <screen>', 'setup|config|dashboard|spaces|devices|incidents|tickets|copilot', 'dashboard')
-    .option('--format <format>', 'json|text', 'json')
+    .option('--format <format>', 'json|text (headless is json-only)', 'json')
     .option('--once', 'Render one frame and exit (default behavior)')
     .option('--follow', 'Continuously stream frames')
     .option('--interval-ms <ms>', 'Polling interval for --follow', '2000')
@@ -981,8 +1340,12 @@ export function createCli(runtime: CliRuntime = {}): Command {
       }
 
       const format = options.format ?? 'json';
-      if (!['json', 'text'].includes(format)) {
-        throw new Error(`Invalid format: ${options.format}`);
+      if (Boolean(options.headless)) {
+        if (format !== 'json') {
+          throw new Error('Headless mode is JSON-only. Use --format json and parse NDJSON frames.');
+        }
+      } else if (!['json', 'text'].includes(format)) {
+        throw new Error(`Invalid format: ${options.format}.`);
       }
 
       const follow = options.once ? false : Boolean(options.follow);
@@ -996,7 +1359,7 @@ export function createCli(runtime: CliRuntime = {}): Command {
         keychain,
         initialScreen: screen,
         headless: Boolean(options.headless),
-        format: format as OutputFormat,
+        format: (options.headless ? 'json' : format) as OutputFormat,
         motionEnabled,
         follow,
         intervalMs: Number.isFinite(intervalMs) ? intervalMs : 2000,
