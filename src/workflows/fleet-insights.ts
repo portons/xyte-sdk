@@ -107,12 +107,53 @@ function parseTimestamp(value: unknown): Date | undefined {
   if (typeof value !== 'string' || !value.trim()) {
     return undefined;
   }
-  const normalized = value.endsWith('Z') ? value : `${value}Z`;
-  const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
+
+  const trimmed = value.trim();
+  const normalized = trimmed.replace(/\s+/, 'T');
+  const parts = normalized.match(
+    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?(Z|[+-]\d{2}(?::?\d{2})?)?$/i
+  );
+
+  if (parts) {
+    const date = parts[1];
+    const hour = parts[2] ?? '00';
+    const minute = parts[3] ?? '00';
+    const second = parts[4] ?? '00';
+    const fraction = parts[5] ? `.${parts[5].slice(0, 3).padEnd(3, '0')}` : '';
+    const zoneRaw = parts[6] ?? 'Z';
+    const zone = /^[+-]\d{4}$/.test(zoneRaw)
+      ? `${zoneRaw.slice(0, 3)}:${zoneRaw.slice(3)}`
+      : /^[+-]\d{2}$/.test(zoneRaw)
+        ? `${zoneRaw}:00`
+        : zoneRaw;
+    const iso = `${date}T${hour}:${minute}:${second}${fraction}${zone}`;
+    const parsedIso = new Date(iso);
+    if (!Number.isNaN(parsedIso.getTime())) {
+      return parsedIso;
+    }
   }
-  return parsed;
+
+  // Treat timezone-naive ISO timestamps as UTC for deterministic reporting.
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed) && !/(Z|[+-]\d{2}(?::?\d{2})?)$/i.test(trimmed)) {
+    const asUtc = new Date(`${trimmed}Z`);
+    if (!Number.isNaN(asUtc.getTime())) {
+      return asUtc;
+    }
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const asDateUtc = new Date(`${trimmed}T00:00:00Z`);
+    if (!Number.isNaN(asDateUtc.getTime())) {
+      return asDateUtc;
+    }
+  }
+
+  const direct = new Date(trimmed);
+  if (!Number.isNaN(direct.getTime())) {
+    return direct;
+  }
+
+  return undefined;
 }
 
 function ageHours(createdAt: unknown): number {
@@ -356,7 +397,7 @@ export function buildDeepDive(snapshot: FleetSnapshot, windowHours = 24): DeepDi
     `Devices: ${snapshot.devices.length} total, ${offlineDevices.length} offline (${pct(offlineDevices.length, snapshot.devices.length)}%).`,
     `Incidents: ${snapshot.incidents.length} total, ${activeIncidents.length} active (${pct(activeIncidents.length, snapshot.incidents.length)}%).`,
     `Tickets: ${snapshot.tickets.length} total, ${openTickets.length} open.`,
-    `24h churn: ${recentIncidents.length} incidents across ${Object.keys(recentDevice).length} devices and ${Object.keys(recentSpace).length} spaces.`,
+    `${windowHours}h churn: ${recentIncidents.length} incidents across ${Object.keys(recentDevice).length} devices and ${Object.keys(recentSpace).length} spaces.`,
     `Data quality: ${mismatches.length} status mismatches detected.`
   ];
 
@@ -435,7 +476,7 @@ export function formatDeepDiveMarkdown(result: DeepDiveResult, includeSensitive 
   markdown.push('| --- | ---: | ---: |');
   result.topIncidentDevices.forEach((row) => markdown.push(`| ${row.device} | ${row.incidentCount} | ${row.activeIncidents} |`));
   markdown.push('');
-  markdown.push('## 24-Hour Churn');
+  markdown.push(`## ${result.windowHours}-Hour Churn`);
   markdown.push('');
   markdown.push(
     `Incidents: **${result.churn24h.incidents}**, devices: **${result.churn24h.devices}**, spaces: **${result.churn24h.spaces}**.`
@@ -484,13 +525,44 @@ function ensureDir(filePath: string): void {
   mkdirSync(dirname(resolve(filePath)), { recursive: true });
 }
 
-function ensurePageSpace(doc: PDFKit.PDFDocument, minHeight: number): boolean {
-  const bottom = doc.page.height - doc.page.margins.bottom;
-  if (doc.y + minHeight <= bottom) {
-    return false;
-  }
-  doc.addPage();
-  return true;
+const PAGE_MARGIN_X = 46;
+const PAGE_MARGIN_Y = 42;
+const HEADER_TOP = 18;
+const HEADER_HEIGHT = 68;
+const FOOTER_HEIGHT = 22;
+const CONTENT_TOP = HEADER_TOP + HEADER_HEIGHT + 16;
+const SPACE_SM = 8;
+const SPACE_MD = 12;
+const SPACE_LG = 18;
+const SPACE_XL = 24;
+const FONT_H1 = 18;
+const FONT_H2 = 13;
+const FONT_BODY = 10;
+const FONT_CAPTION = 9;
+const TABLE_ROW_MIN = 22;
+const TABLE_ROW_MAX = 220;
+const TABLE_CELL_PAD_X = 6;
+const TABLE_CELL_PAD_Y = 5;
+
+interface WindowFocus {
+  label: string;
+  detail: string;
+  accent: string;
+}
+
+interface PdfRenderContext {
+  tenantId: string;
+  generatedAtUtc: string;
+  windowHours: number;
+  windowFocus: WindowFocus;
+  logoPath?: string;
+}
+
+interface TableColumn {
+  header: string;
+  width: number;
+  align?: 'left' | 'center' | 'right';
+  wrap?: boolean;
 }
 
 function resolveLogoPath(): string | undefined {
@@ -502,166 +574,414 @@ function resolveLogoPath(): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
-function drawPdfHeader(doc: PDFKit.PDFDocument, args: { tenantId: string; generatedAtUtc: string; logoPath?: string }): void {
+function formatTwoDigits(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+export function formatUtcForReport(value: unknown): string {
+  const parsed = parseTimestamp(value);
+  if (!parsed) {
+    return identifier(value);
+  }
+  const y = parsed.getUTCFullYear();
+  const m = formatTwoDigits(parsed.getUTCMonth() + 1);
+  const d = formatTwoDigits(parsed.getUTCDate());
+  const hh = formatTwoDigits(parsed.getUTCHours());
+  const mm = formatTwoDigits(parsed.getUTCMinutes());
+  return `${y}-${m}-${d} ${hh}:${mm} UTC`;
+}
+
+export function getWindowFocus(windowHours: number): WindowFocus {
+  if (windowHours <= 24) {
+    return {
+      label: 'Immediate churn',
+      detail: 'Prioritize active incident containment and hot spaces in the last day.',
+      accent: '#B45309'
+    };
+  }
+  if (windowHours <= 72) {
+    return {
+      label: 'Short-term Trend',
+      detail: 'Track repeat offenders and stabilize recurring high-churn spaces.',
+      accent: '#1D4ED8'
+    };
+  }
+  return {
+    label: 'Weekly concentration',
+    detail: 'Focus on sustained incident concentration and structural remediation.',
+    accent: '#166534'
+  };
+}
+
+function resetCursor(doc: PDFKit.PDFDocument): void {
+  doc.x = doc.page.margins.left;
+  doc.y = Math.max(doc.y, CONTENT_TOP);
+}
+
+function drawPdfHeader(doc: PDFKit.PDFDocument, ctx: PdfRenderContext): void {
   const left = doc.page.margins.left;
   const right = doc.page.width - doc.page.margins.right;
-  const bandTop = 22;
-  const bandHeight = 64;
+  const bandTop = HEADER_TOP;
+  const bandHeight = HEADER_HEIGHT;
 
   doc.save();
-  doc.roundedRect(left, bandTop, right - left, bandHeight, 8).fillAndStroke('#EEF5FF', '#CBDCF6');
+  doc.roundedRect(left, bandTop, right - left, bandHeight, 8).fillAndStroke('#E8F0FC', '#C2D5F3');
   doc.restore();
 
-  if (args.logoPath) {
+  if (ctx.logoPath) {
     try {
-      doc.image(args.logoPath, left + 12, bandTop + 14, { fit: [110, 34] });
+      doc.image(ctx.logoPath, left + 12, bandTop + 16, { fit: [110, 34] });
     } catch {
-      doc.font('Helvetica-Bold').fontSize(28).fillColor('#1459A6').text('XYTE', left + 14, bandTop + 16);
+      doc.font('Helvetica-Bold').fontSize(36).fillColor('#1459A6').text('XYTE', left + 12, bandTop + 12);
     }
   } else {
-    doc.font('Helvetica-Bold').fontSize(28).fillColor('#1459A6').text('XYTE', left + 14, bandTop + 16);
+    doc.font('Helvetica-Bold').fontSize(36).fillColor('#1459A6').text('XYTE', left + 12, bandTop + 12);
   }
 
   doc
     .font('Helvetica-Bold')
-    .fontSize(16)
+    .fontSize(FONT_H1)
     .fillColor('#1A2332')
-    .text('Fleet Findings Report', left + 150, bandTop + 14, { width: right - left - 160, align: 'left' });
+    .text('Fleet Findings Report', left + 146, bandTop + 14, { width: right - left - 250, align: 'left' });
   doc
     .font('Helvetica')
-    .fontSize(10)
+    .fontSize(FONT_BODY)
     .fillColor('#415067')
-    .text(`Tenant: ${args.tenantId}`, left + 150, bandTop + 36, { width: right - left - 160, align: 'left' })
-    .text(`Generated: ${args.generatedAtUtc}`, left + 150, bandTop + 50, { width: right - left - 160, align: 'left' });
+    .text(`Tenant: ${ctx.tenantId}`, left + 146, bandTop + 37, { width: right - left - 250, align: 'left' })
+    .text(`Generated: ${formatUtcForReport(ctx.generatedAtUtc)}`, left + 146, bandTop + 51, { width: right - left - 250, align: 'left' });
 
-  doc.y = bandTop + bandHeight + 18;
+  const badgeWidth = 165;
+  const badgeHeight = 28;
+  const badgeX = right - badgeWidth - 12;
+  const badgeY = bandTop + 20;
+  doc.save();
+  doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 14).fill(ctx.windowFocus.accent);
+  doc.restore();
+  doc.font('Helvetica-Bold').fontSize(FONT_CAPTION).fillColor('#FFFFFF').text(
+    `${ctx.windowHours}h • ${ctx.windowFocus.label}`,
+    badgeX + 12,
+    badgeY + 9,
+    { width: badgeWidth - 24, align: 'center' }
+  );
 }
 
-function drawSectionTitle(doc: PDFKit.PDFDocument, title: string): void {
-  ensurePageSpace(doc, 40);
-  doc.moveDown(0.35);
-  doc.font('Helvetica-Bold').fontSize(14).fillColor('#1F2937').text(title);
-  doc.moveDown(0.15);
+function drawPdfFooter(doc: PDFKit.PDFDocument, ctx: PdfRenderContext, pageNumber: number, pageCount: number): void {
+  const y = doc.page.height - doc.page.margins.bottom - FOOTER_HEIGHT + 10;
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  doc.save();
+  doc.moveTo(left, y - 6).lineTo(right, y - 6).lineWidth(0.6).strokeColor('#D5DEE9').stroke();
+  doc.restore();
+  doc.font('Helvetica').fontSize(FONT_CAPTION).fillColor('#5B687B').text('Xyte Fleet Findings Report', left, y, { width: 220, align: 'left' });
+  doc.text(`${ctx.windowHours}h window`, left + 220, y, { width: 120, align: 'center' });
+  doc.text(`Page ${pageNumber} of ${pageCount}`, right - 120, y, { width: 120, align: 'right' });
+}
+
+function startReportPage(doc: PDFKit.PDFDocument, ctx: PdfRenderContext): void {
+  doc.addPage();
+  drawPdfHeader(doc, ctx);
+  resetCursor(doc);
+}
+
+function ensurePageSpace(doc: PDFKit.PDFDocument, ctx: PdfRenderContext, minHeight: number): void {
+  resetCursor(doc);
+  const bottom = doc.page.height - doc.page.margins.bottom - FOOTER_HEIGHT - SPACE_SM;
+  if (doc.y + minHeight <= bottom) {
+    return;
+  }
+  startReportPage(doc, ctx);
+}
+
+function drawSectionTitle(doc: PDFKit.PDFDocument, ctx: PdfRenderContext, title: string): void {
+  ensurePageSpace(doc, ctx, 30);
+  resetCursor(doc);
+  doc.moveDown(0.2);
+  doc.font('Helvetica-Bold').fontSize(FONT_H2).fillColor('#182433').text(title, {
+    width: doc.page.width - doc.page.margins.left - doc.page.margins.right
+  });
+  const y = doc.y + 2;
+  doc.save();
+  doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y).lineWidth(0.8).strokeColor('#D4DEE8').stroke();
+  doc.restore();
+  doc.moveDown(0.2);
+}
+
+function drawWindowFocusStrip(doc: PDFKit.PDFDocument, ctx: PdfRenderContext): void {
+  ensurePageSpace(doc, ctx, 56);
+  resetCursor(doc);
+  const x = doc.page.margins.left;
+  const y = doc.y;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const height = 48;
+  doc.save();
+  doc.roundedRect(x, y, width, height, 7).fillAndStroke('#F3F7FC', '#D7E3F2');
+  doc.restore();
+  doc.font('Helvetica-Bold').fontSize(FONT_BODY).fillColor(ctx.windowFocus.accent).text('Window Focus', x + 12, y + 10);
+  doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#243447').text(ctx.windowFocus.detail, x + 110, y + 10, {
+    width: width - 122
+  });
+  doc.y = y + height + SPACE_MD;
 }
 
 function drawKpiGrid(
   doc: PDFKit.PDFDocument,
+  ctx: PdfRenderContext,
   cards: Array<{ label: string; value: string; tone?: 'normal' | 'warn' | 'bad' }>
 ): void {
-  ensurePageSpace(doc, 100);
+  ensurePageSpace(doc, ctx, 106);
+  resetCursor(doc);
   const startX = doc.page.margins.left;
   const topY = doc.y;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const gap = 12;
+  const gap = SPACE_SM;
   const cardWidth = Math.floor((width - gap * 3) / 4);
-  const cardHeight = 74;
+  const cardHeight = 84;
 
   cards.slice(0, 4).forEach((card, index) => {
     const x = startX + index * (cardWidth + gap);
     const tone =
-      card.tone === 'bad' ? { bg: '#FDECEC', border: '#F8C9C9', value: '#A42F2F' } : card.tone === 'warn'
-      ? { bg: '#FFF5E6', border: '#F6D9A8', value: '#9A5B00' }
-      : { bg: '#EEF6FF', border: '#CFE3FF', value: '#1459A6' };
+      card.tone === 'bad'
+        ? { bg: '#FDEBEC', border: '#F7C4C7', value: '#A2282F' }
+        : card.tone === 'warn'
+          ? { bg: '#FFF6E8', border: '#F7D9A6', value: '#9C5F08' }
+          : { bg: '#EEF6FF', border: '#C6E0FF', value: '#1459A6' };
 
     doc.save();
-    doc.roundedRect(x, topY, cardWidth, cardHeight, 6).fillAndStroke(tone.bg, tone.border);
+    doc.roundedRect(x, topY, cardWidth, cardHeight, 8).fillAndStroke(tone.bg, tone.border);
     doc.restore();
-    doc.font('Helvetica').fontSize(10).fillColor('#4B5563').text(card.label, x + 10, topY + 14, {
+    doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#4B5563').text(card.label, x + 10, topY + 13, {
       width: cardWidth - 20
     });
-    doc.font('Helvetica-Bold').fontSize(22).fillColor(tone.value).text(card.value, x + 10, topY + 34, {
+    doc.font('Helvetica-Bold').fontSize(26).fillColor(tone.value).text(card.value, x + 10, topY + 37, {
       width: cardWidth - 20
     });
   });
 
-  doc.y = topY + cardHeight + 8;
+  doc.y = topY + cardHeight + SPACE_LG;
 }
 
-function drawBullets(doc: PDFKit.PDFDocument, lines: string[]): void {
+function drawKeyFindings(doc: PDFKit.PDFDocument, ctx: PdfRenderContext, lines: string[]): void {
+  const findings = lines.slice(0, 4);
+  if (!findings.length) {
+    return;
+  }
+
+  ensurePageSpace(doc, ctx, 72);
+  resetCursor(doc);
+  const x = doc.page.margins.left;
+  const y = doc.y;
+  const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  doc.save();
+  doc.roundedRect(x, y, width, 56 + findings.length * 10, 8).fillAndStroke('#F8FAFD', '#DCE6F2');
+  doc.restore();
+  doc.font('Helvetica-Bold').fontSize(FONT_BODY).fillColor('#223245').text('Key Findings', x + 12, y + 10);
+  let cursorY = y + 26;
+  findings.forEach((line) => {
+    doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#1F2A38').text(`- ${line}`, x + 12, cursorY, {
+      width: width - 24
+    });
+    cursorY += 14;
+  });
+  doc.y = y + 56 + findings.length * 10 + SPACE_LG;
+}
+
+function drawBullets(doc: PDFKit.PDFDocument, ctx: PdfRenderContext, lines: string[]): void {
   lines.forEach((line) => {
-    ensurePageSpace(doc, 20);
-    doc.font('Helvetica').fontSize(11).fillColor('#1F2937').text(`- ${line}`, {
+    ensurePageSpace(doc, ctx, 20);
+    resetCursor(doc);
+    doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#1F2937').text(`- ${line}`, {
       width: doc.page.width - doc.page.margins.left - doc.page.margins.right
     });
+    doc.moveDown(0.05);
   });
+}
+
+function drawSpaceBars(doc: PDFKit.PDFDocument, ctx: PdfRenderContext, rows: Array<{ space: string; incidents: number }>): void {
+  if (!rows.length) {
+    return;
+  }
+  drawSectionTitle(doc, ctx, `${ctx.windowHours}h Churn Concentration (Top Spaces)`);
+  const chartRows = rows.slice(0, 5);
+  const maxValue = Math.max(...chartRows.map((row) => row.incidents), 1);
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const labelWidth = 285;
+  const valueWidth = 50;
+  const barWidth = pageWidth - labelWidth - valueWidth - 20;
+  chartRows.forEach((row) => {
+    ensurePageSpace(doc, ctx, 24);
+    resetCursor(doc);
+    const y = doc.y;
+    const x = doc.page.margins.left;
+    const ratio = row.incidents / maxValue;
+    doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#1F2937').text(row.space, x, y + 5, {
+      width: labelWidth - 8,
+      ellipsis: true
+    });
+    doc.save();
+    doc.roundedRect(x + labelWidth, y + 8, barWidth, 9, 3).fill('#E6ECF5');
+    doc.roundedRect(x + labelWidth, y + 8, Math.max(8, barWidth * ratio), 9, 3).fill('#3B82F6');
+    doc.restore();
+    doc.font('Helvetica-Bold').fontSize(FONT_BODY).fillColor('#1F2937').text(String(row.incidents), x + labelWidth + barWidth + 8, y + 5, {
+      width: valueWidth,
+      align: 'right'
+    });
+    doc.y = y + 22;
+  });
+  doc.moveDown(0.35);
+}
+
+function normalizeColumns(columns: TableColumn[], availableWidth: number): TableColumn[] {
+  const total = columns.reduce((sum, column) => sum + column.width, 0);
+  if (Math.abs(total - availableWidth) <= 1) {
+    return columns;
+  }
+  if (total > availableWidth) {
+    const ratio = availableWidth / total;
+    const scaled = columns.map((column) => ({ ...column, width: Math.floor(column.width * ratio) }));
+    const scaledTotal = scaled.reduce((sum, column) => sum + column.width, 0);
+    scaled[0].width += availableWidth - scaledTotal;
+    return scaled;
+  }
+  const grown = columns.map((column) => ({ ...column }));
+  const flexIndex = grown.findIndex((column) => column.wrap !== false);
+  const target = flexIndex === -1 ? 0 : flexIndex;
+  grown[target].width += availableWidth - total;
+  return grown;
+}
+
+function measureTableRowHeight(doc: PDFKit.PDFDocument, columns: TableColumn[], row: string[]): number {
+  doc.font('Helvetica').fontSize(FONT_BODY);
+  const lineHeight = doc.currentLineHeight();
+  let maxHeight = lineHeight;
+  row.forEach((cell, index) => {
+    const column = columns[index];
+    const innerWidth = Math.max(20, column.width - TABLE_CELL_PAD_X * 2);
+    if (column.wrap === false) {
+      maxHeight = Math.max(maxHeight, lineHeight);
+      return;
+    }
+    const measured = doc.heightOfString(cell, {
+      width: innerWidth,
+      align: column.align ?? 'left'
+    });
+    maxHeight = Math.max(maxHeight, measured);
+  });
+  const rowHeight = maxHeight + TABLE_CELL_PAD_Y * 2;
+  return Math.min(TABLE_ROW_MAX, Math.max(TABLE_ROW_MIN, rowHeight));
 }
 
 function drawTable(
   doc: PDFKit.PDFDocument,
+  ctx: PdfRenderContext,
   args: {
     title: string;
-    headers: string[];
+    columns: TableColumn[];
     rows: string[][];
-    columnWidths?: number[];
+    emptyMessage?: string;
   }
 ): void {
-  drawSectionTitle(doc, args.title);
-  const left = doc.page.margins.left;
-  const tableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const defaultWidth = Math.floor(tableWidth / args.headers.length);
-  const widths = args.columnWidths ?? args.headers.map(() => defaultWidth);
-  const rowHeight = 20;
+  const tableLeft = doc.page.margins.left;
+  const availableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const columns = normalizeColumns(args.columns, availableWidth);
+  const headerHeight = 24;
+  const continuationTitle = `${args.title} (cont.)`;
 
   const drawHeader = () => {
-    ensurePageSpace(doc, rowHeight + 10);
+    ensurePageSpace(doc, ctx, headerHeight + 6);
+    resetCursor(doc);
     const y = doc.y;
-    let x = left;
-    args.headers.forEach((header, index) => {
-      const width = widths[index] ?? defaultWidth;
+    let x = tableLeft;
+    columns.forEach((column) => {
       doc.save();
-      doc.rect(x, y, width, rowHeight).fillAndStroke('#E8EDF3', '#CBD5E1');
+      doc.rect(x, y, column.width, headerHeight).fillAndStroke('#E8EEF6', '#CAD7E8');
       doc.restore();
-      doc.font('Helvetica-Bold').fontSize(10).fillColor('#1F2937').text(header, x + 6, y + 6, {
-        width: width - 12,
+      doc.font('Helvetica-Bold').fontSize(FONT_BODY).fillColor('#1F2937').text(column.header, x + TABLE_CELL_PAD_X, y + 6, {
+        width: column.width - TABLE_CELL_PAD_X * 2,
+        align: column.align ?? 'left',
         ellipsis: true
       });
-      x += width;
+      x += column.width;
     });
-    doc.y = y + rowHeight;
+    doc.y = y + headerHeight;
   };
 
+  if (!args.rows.length) {
+    ensurePageSpace(doc, ctx, 32 + headerHeight);
+    drawSectionTitle(doc, ctx, args.title);
+    ensurePageSpace(doc, ctx, 24);
+    resetCursor(doc);
+    doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#475569').text(args.emptyMessage ?? 'No data available.', {
+      width: availableWidth
+    });
+    doc.moveDown(0.5);
+    return;
+  }
+
+  const firstRowHeight = measureTableRowHeight(doc, columns, args.rows[0]);
+  ensurePageSpace(doc, ctx, 34 + headerHeight + firstRowHeight);
+  drawSectionTitle(doc, ctx, args.title);
   drawHeader();
   args.rows.forEach((row) => {
-    if (ensurePageSpace(doc, rowHeight + 2)) {
+    const rowHeight = measureTableRowHeight(doc, columns, row);
+    const bottom = doc.page.height - doc.page.margins.bottom - FOOTER_HEIGHT - SPACE_SM;
+    if (doc.y + rowHeight > bottom) {
+      startReportPage(doc, ctx);
+      ensurePageSpace(doc, ctx, 34 + headerHeight + Math.min(rowHeight, 60));
+      drawSectionTitle(doc, ctx, continuationTitle);
       drawHeader();
     }
+
     const y = doc.y;
-    let x = left;
+    let x = tableLeft;
     row.forEach((cell, index) => {
-      const width = widths[index] ?? defaultWidth;
+      const column = columns[index];
       doc.save();
-      doc.rect(x, y, width, rowHeight).fillAndStroke('#FFFFFF', '#E5E7EB');
+      doc.rect(x, y, column.width, rowHeight).fillAndStroke('#FFFFFF', '#E3EAF3');
       doc.restore();
-      doc.font('Helvetica').fontSize(10).fillColor('#111827').text(cell, x + 6, y + 6, {
-        width: width - 12,
-        ellipsis: true
+      doc.font('Helvetica').fontSize(FONT_BODY).fillColor('#0F172A').text(cell, x + TABLE_CELL_PAD_X, y + TABLE_CELL_PAD_Y, {
+        width: column.width - TABLE_CELL_PAD_X * 2,
+        height: rowHeight - TABLE_CELL_PAD_Y * 2,
+        align: column.align ?? 'left',
+        lineBreak: column.wrap !== false,
+        ellipsis: column.wrap === false
       });
-      x += width;
+      x += column.width;
     });
     doc.y = y + rowHeight;
   });
+  doc.moveDown(0.45);
 }
 
 function renderBrandedPdfReport(deepDive: DeepDiveResult, outputPath: string, includeSensitive: boolean): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
     ensureDir(outputPath);
+    const ctx: PdfRenderContext = {
+      tenantId: deepDive.tenantId,
+      generatedAtUtc: deepDive.generatedAtUtc,
+      windowHours: deepDive.windowHours,
+      windowFocus: getWindowFocus(deepDive.windowHours),
+      logoPath: resolveLogoPath()
+    };
+
     const doc = new PDFDocument({
       size: 'LETTER',
-      margin: 50
+      margins: {
+        left: PAGE_MARGIN_X,
+        right: PAGE_MARGIN_X,
+        top: PAGE_MARGIN_Y,
+        bottom: PAGE_MARGIN_Y
+      },
+      bufferPages: true
     });
     const stream = doc.pipe(createWriteStream(outputPath));
-    const logoPath = resolveLogoPath();
 
     stream.on('finish', () => resolvePromise());
     stream.on('error', (error) => rejectPromise(error));
 
-    drawPdfHeader(doc, {
-      tenantId: deepDive.tenantId,
-      generatedAtUtc: deepDive.generatedAtUtc,
-      logoPath
-    });
+    drawPdfHeader(doc, ctx);
+    resetCursor(doc);
 
-    drawKpiGrid(doc, [
+    drawKpiGrid(doc, ctx, [
       { label: 'Active incidents', value: String(deepDive.activeIncidentAging.length), tone: deepDive.activeIncidentAging.length > 0 ? 'warn' : 'normal' },
       { label: `${deepDive.windowHours}h churn`, value: String(deepDive.churn24h.incidents), tone: deepDive.churn24h.incidents > 0 ? 'warn' : 'normal' },
       { label: 'Open tickets', value: String(deepDive.ticketPosture.openTickets), tone: deepDive.ticketPosture.openTickets > 0 ? 'warn' : 'normal' },
@@ -672,63 +992,107 @@ function renderBrandedPdfReport(deepDive: DeepDiveResult, outputPath: string, in
       }
     ]);
 
-    drawSectionTitle(doc, 'Executive Summary');
-    drawBullets(doc, deepDive.summary);
+    drawWindowFocusStrip(doc, ctx);
+    drawKeyFindings(doc, ctx, deepDive.summary);
 
-    drawTable(doc, {
+    drawSectionTitle(doc, ctx, 'Executive Summary');
+    drawBullets(doc, ctx, deepDive.summary);
+    doc.moveDown(0.35);
+
+    drawSpaceBars(doc, ctx, deepDive.churn24h.bySpace);
+
+    drawTable(doc, ctx, {
       title: 'Top Spaces by Offline Devices',
-      headers: ['Space', 'Offline', 'Share'],
-      columnWidths: [320, 90, 90],
-      rows: deepDive.topOfflineSpaces.map((row) => [row.space, String(row.offlineDevices), `${row.shareOfOfflinePct}%`])
+      columns: [
+        { header: 'Space', width: 370, wrap: true },
+        { header: 'Offline', width: 90, align: 'right', wrap: false },
+        { header: 'Share', width: 90, align: 'right', wrap: false }
+      ],
+      rows: deepDive.topOfflineSpaces.map((row) => [row.space, String(row.offlineDevices), `${row.shareOfOfflinePct}%`]),
+      emptyMessage: 'No offline spaces found.'
     });
 
-    drawTable(doc, {
+    drawTable(doc, ctx, {
       title: 'Top Devices by Incident Volume',
-      headers: ['Device', 'Incidents', 'Active'],
-      columnWidths: [320, 90, 90],
-      rows: deepDive.topIncidentDevices.map((row) => [row.device, String(row.incidentCount), String(row.activeIncidents)])
+      columns: [
+        { header: 'Device', width: 370, wrap: true },
+        { header: 'Incidents', width: 90, align: 'right', wrap: false },
+        { header: 'Active', width: 90, align: 'right', wrap: false }
+      ],
+      rows: deepDive.topIncidentDevices.map((row) => [row.device, String(row.incidentCount), String(row.activeIncidents)]),
+      emptyMessage: 'No incident device concentration detected.'
     });
 
-    drawTable(doc, {
+    drawTable(doc, ctx, {
       title: 'Active Incident Aging',
-      headers: ['Device', 'Space', 'Age (h)', 'Created At (UTC)'],
-      columnWidths: [130, 220, 70, 80],
-      rows: deepDive.activeIncidentAging.slice(0, 12).map((row) => [row.device, row.space, String(row.ageHours), row.createdAtUtc])
+      columns: [
+        { header: 'Device', width: 120, wrap: true },
+        { header: 'Space', width: 230, wrap: true },
+        { header: 'Age (h)', width: 70, align: 'right', wrap: false },
+        { header: 'Created At', width: 130, wrap: false }
+      ],
+      rows: deepDive.activeIncidentAging.slice(0, 16).map((row) => [row.device, row.space, String(row.ageHours), formatUtcForReport(row.createdAtUtc)]),
+      emptyMessage: 'No active incidents.'
     });
 
-    drawTable(doc, {
+    drawTable(doc, ctx, {
       title: `${deepDive.windowHours}-Hour Churn by Space`,
-      headers: ['Space', 'Incidents'],
-      columnWidths: [410, 90],
-      rows: deepDive.churn24h.bySpace.map((row) => [row.space, String(row.incidents)])
+      columns: [
+        { header: 'Space', width: 450, wrap: true },
+        { header: 'Incidents', width: 100, align: 'right', wrap: false }
+      ],
+      rows: deepDive.churn24h.bySpace.map((row) => [row.space, String(row.incidents)]),
+      emptyMessage: 'No churn events in this window.'
     });
 
-    drawTable(doc, {
+    drawTable(doc, ctx, {
       title: 'Oldest Open Tickets',
-      headers: ['Ticket', 'Title', 'Age (h)', 'Device', 'Created At'],
-      columnWidths: [80, 200, 60, 90, 70],
-      rows: deepDive.ticketPosture.oldestOpenTickets.slice(0, 10).map((row) => [
+      columns: [
+        { header: 'Ticket', width: 88, wrap: false },
+        { header: 'Title', width: 182, wrap: true },
+        { header: 'Age (h)', width: 62, align: 'right', wrap: false },
+        { header: 'Device', width: 88, wrap: false },
+        { header: 'Created At', width: 130, wrap: false }
+      ],
+      rows: deepDive.ticketPosture.oldestOpenTickets.slice(0, 12).map((row) => [
         redactSensitive(row.ticketId, includeSensitive),
         row.title,
         String(row.ageHours),
         redactSensitive(row.deviceId, includeSensitive),
-        row.createdAtUtc
-      ])
+        formatUtcForReport(row.createdAtUtc)
+      ]),
+      emptyMessage: 'No open tickets.'
     });
 
     if (deepDive.dataQuality.statusMismatches.length) {
-      drawTable(doc, {
+      drawTable(doc, ctx, {
         title: 'Data Quality: Status Mismatches',
-        headers: ['Device', 'status', 'state.status', 'Last Seen', 'Space'],
-        columnWidths: [120, 70, 90, 110, 120],
-        rows: deepDive.dataQuality.statusMismatches.map((row) => [row.device, row.status, row.stateStatus, row.lastSeen, row.space])
+        columns: [
+          { header: 'Device', width: 120, wrap: true },
+          { header: 'status', width: 70, wrap: false },
+          { header: 'state.status', width: 90, wrap: false },
+          { header: 'Last Seen', width: 130, wrap: false },
+          { header: 'Space', width: 160, wrap: true }
+        ],
+        rows: deepDive.dataQuality.statusMismatches.map((row) => [
+          row.device,
+          row.status,
+          row.stateStatus,
+          formatUtcForReport(row.lastSeen),
+          row.space
+        ])
       });
+    }
+
+    const pages = doc.bufferedPageRange();
+    for (let index = pages.start; index < pages.start + pages.count; index += 1) {
+      doc.switchToPage(index);
+      drawPdfFooter(doc, ctx, index - pages.start + 1, pages.count);
     }
 
     doc.end();
   });
 }
-
 export async function generateFleetReport(args: {
   deepDive: DeepDiveResult;
   format: 'markdown' | 'pdf';
