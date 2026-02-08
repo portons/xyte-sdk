@@ -484,7 +484,8 @@
         color: var(--cta);
         background: rgba(240, 160, 48, 0.12);
       }
-      .terminal-frame img {
+      .terminal-frame img,
+      .terminal-frame video {
         width: 100%;
         display: block;
       }
@@ -1126,11 +1127,14 @@
                   <span class="terminal-title">xyte tui — acme-demo</span>
                   <span class="terminal-badge badge-operator">Operator</span>
                 </div>
-                <img
-                  src="./media/tui-dashboard-synthetic.png"
-                  alt="XYTE TUI interactive dashboard showing device KPIs, incidents table, and ticket list"
-                  loading="eager"
-                />
+                <video autoplay loop muted playsinline
+                  poster="./media/tui-dashboard-synthetic.png"
+                  width="100%" style="display:block">
+                  <source src="./media/xyte-demo.webm" type="video/webm" />
+                  <source src="./media/xyte-demo.mp4" type="video/mp4" />
+                  <img src="./media/tui-dashboard-synthetic.png"
+                    alt="XYTE TUI interactive dashboard showing device KPIs, incidents table, and ticket list" />
+                </video>
               </div>
             </div>
           </div>
