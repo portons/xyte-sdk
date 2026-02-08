@@ -704,6 +704,98 @@
       .sdk-block .cm { color: var(--text-muted); }
       .sdk-block .type { color: var(--cta); }
 
+      /* ── Skill Router ────────────────────────────────────────── */
+      .skill-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 32px;
+        align-items: start;
+      }
+      .skill-left h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: var(--text-primary);
+      }
+      .skill-steps {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 20px;
+        counter-reset: skill-step;
+      }
+      .skill-steps li {
+        counter-increment: skill-step;
+        font-size: 14px;
+        color: var(--text-secondary);
+        padding: 6px 0 6px 32px;
+        position: relative;
+        line-height: 1.5;
+      }
+      .skill-steps li::before {
+        content: counter(skill-step);
+        position: absolute;
+        left: 0;
+        top: 6px;
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: var(--accent-dim);
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .safety-tiers {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+        flex-wrap: wrap;
+      }
+      .safety-tier {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 6px 14px;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-card);
+        color: var(--text-secondary);
+      }
+      .safety-tier.tier-read { color: var(--accent); border-color: var(--accent-dim); }
+      .safety-tier.tier-write { color: var(--cta); border-color: rgba(240, 160, 48, 0.2); }
+      .safety-tier.tier-delete { color: var(--red); border-color: rgba(240, 96, 96, 0.2); }
+      .safety-arrow {
+        font-size: 14px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+      }
+      .skill-right .code-panel {
+        margin: 0;
+      }
+      .skill-cta {
+        margin-top: 20px;
+      }
+      .skill-cta a {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--accent);
+        border-bottom: 1px dashed var(--accent-dim);
+        padding-bottom: 2px;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      .skill-cta a:hover {
+        color: var(--text-primary);
+        border-color: var(--text-primary);
+      }
+      @media (max-width: 1040px) {
+        .skill-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
       /* ── Use Cases ──────────────────────────────────────────── */
       .usecases-grid {
         display: grid;
@@ -980,6 +1072,7 @@
         <nav class="nav-links" aria-label="Primary navigation">
           <a href="#features">Features</a>
           <a href="#screenshots">Screenshots</a>
+          <a href="#skill-router">Skill</a>
           <a href="#use-cases">Use Cases</a>
           <a href="#get-started">Get Started</a>
           <a href="#docs">Docs</a>
@@ -1082,9 +1175,9 @@
               <div class="pillar-icon" aria-hidden="true"><img src="./media/icon-agent.png" alt="" width="48" height="48" /></div>
               <h3>For AI Agents</h3>
               <p>
-                Headless JSON mode emits versioned NDJSON frames. MCP tool
-                server exposes 7 tools for orchestration. All outputs are
-                deterministic, parseable, and schema-validated.
+                The <a href="../skills/xyte/SKILL.md" style="color:var(--accent);border-bottom:1px dashed var(--accent-dim)">SKILL router</a> gives agents a deterministic 5-step
+                execution order with a 3-tier safety model. Headless JSON, MCP tools, and
+                envelope outputs are all agent-native and schema-validated.
               </p>
             </article>
           </div>
@@ -1281,6 +1374,57 @@
         </div>
       </section>
 
+      <!-- ── Agent Skill Router ────────────────────────────── -->
+      <section class="section" id="skill-router" aria-labelledby="skill-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="skill-title">Agent Skill Router</h2>
+            <p>One file that tells any AI agent exactly how to operate your fleet &mdash; deterministic steps, safety tiers, and copy-paste commands.</p>
+          </div>
+          <div class="skill-grid">
+            <div class="skill-left fade-in d1">
+              <h3>What the SKILL file provides</h3>
+              <ol class="skill-steps">
+                <li>Setup &amp; readiness gate</li>
+                <li>Auth &amp; key slot selection</li>
+                <li>Endpoint operations (guarded)</li>
+                <li>Fleet insights &amp; reports</li>
+                <li>Headless frames / MCP server</li>
+              </ol>
+              <h3>3-Tier Safety Model</h3>
+              <div class="safety-tiers">
+                <span class="safety-tier tier-read">READ (default)</span>
+                <span class="safety-arrow">&#8594;</span>
+                <span class="safety-tier tier-write">WRITE (--allow-write)</span>
+                <span class="safety-arrow">&#8594;</span>
+                <span class="safety-tier tier-delete">DELETE (--confirm &lt;key&gt;)</span>
+              </div>
+              <div class="skill-cta">
+                <a href="../skills/xyte/SKILL.md">View Full SKILL File &rarr;</a>
+              </div>
+            </div>
+            <div class="skill-right fade-in d2">
+              <div class="code-panel">
+                <div class="code-panel-head">
+                  <strong>Workflow Selector</strong>
+                  <span class="terminal-badge badge-agent">SKILL.md</span>
+                </div>
+                <pre><span class="cm"># Intent                    → Command</span>
+<span class="cmd">First-time setup</span>          → <span class="val">xyte setup run --non-interactive</span>
+<span class="cmd">Check readiness</span>           → <span class="val">xyte setup status --format json</span>
+<span class="cmd">Connectivity diagnostics</span>  → <span class="val">xyte config doctor --format json</span>
+<span class="cmd">List endpoints</span>            → <span class="val">xyte list-endpoints</span>
+<span class="cmd">Call endpoint (read)</span>      → <span class="val">xyte call &lt;key&gt; --output-mode envelope</span>
+<span class="cmd">Call endpoint (write)</span>     → <span class="val">xyte call &lt;key&gt; --allow-write</span>
+<span class="cmd">Fleet health</span>              → <span class="val">xyte inspect fleet --format json</span>
+<span class="cmd">Headless snapshot</span>         → <span class="val">xyte tui --headless --screen dashboard --once</span>
+<span class="cmd">Start MCP server</span>          → <span class="val">xyte mcp serve</span></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Use Cases ─────────────────────────────────────── -->
       <section class="section" id="use-cases" aria-labelledby="uc-title">
         <div class="wrap">
@@ -1320,6 +1464,7 @@
               <div class="usecase-icon" aria-hidden="true"><img src="./media/uc-ai.png" alt="" width="40" height="40" /></div>
               <h3>AI Agent Integration</h3>
               <ul>
+                <li>Use the SKILL router as the agent-native entry point for the entire workflow</li>
                 <li>Consume JSON-only headless frames and envelope outputs deterministically</li>
                 <li>Validate payloads against JSON schemas in CI before production loops</li>
                 <li>Run MCP tool server for structured tool calls from agent frameworks</li>
@@ -1476,6 +1621,7 @@
             <a class="schema-chip" href="./endpoints.md">Endpoint Catalog</a>
             <a class="schema-chip" href="./config.md">Config &amp; Profiles</a>
             <a class="schema-chip" href="./llm-providers.md">LLM Providers</a>
+            <a class="schema-chip" href="../skills/xyte/SKILL.md">Skill Router</a>
             <a class="schema-chip" href="./drift-notes.md">Route Drift Notes</a>
           </div>
         </div>

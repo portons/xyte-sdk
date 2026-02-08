@@ -31,10 +31,23 @@ Production-focused TypeScript SDK + CLI + full-screen TUI for Xyte public APIs, 
 ## Landing Page
 
 - Project landing page: `docs/index.html`
-- Open locally in browser:
+- Includes:
+  - Quickstart for operators and agents
+  - CLI/API command map
+  - schema contract references
+  - screenshots (TUI + headless)
+  - use-case playbooks and copy/paste flows
+- Open locally (direct file):
 
 ```bash
 open docs/index.html
+```
+
+- Or serve via localhost:
+
+```bash
+python3 -m http.server 4173 --directory docs
+# then open http://localhost:4173
 ```
 
 ## Visual Tour (Synthetic)
