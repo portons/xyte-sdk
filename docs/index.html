@@ -1,210 +1,1523 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" id="top" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>XYTE SDK - CLI, TUI, Headless, MCP</title>
+    <title>XYTE SDK — Fleet Operations for Humans and AI Agents</title>
+    <meta
+      name="description"
+      content="TypeScript SDK, CLI, and TUI for Xyte IoT device management. Interactive dashboards for operators, headless JSON for AI agents, MCP tools for orchestration."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      /* ── Design Tokens ─────────────────────────────────────── */
       :root {
-        --bg: #f6f8fb;
-        --panel: #ffffff;
-        --ink: #0f172a;
-        --muted: #475569;
-        --brand: #1459a6;
-        --line: #d7e2f0;
-        --code-bg: #0b1220;
-        --code-ink: #dbeafe;
+        --bg-base: #0c0d0f;
+        --bg-card: #141518;
+        --bg-elevated: #1a1b20;
+        --bg-code: #111214;
+        --border-subtle: rgba(255, 255, 255, 0.06);
+        --border-hover: rgba(255, 255, 255, 0.14);
+        --text-primary: #e8e8e8;
+        --text-secondary: #999;
+        --text-muted: #606060;
+        --accent: #06d6a0;
+        --accent-dim: rgba(6, 214, 160, 0.12);
+        --accent-glow: rgba(6, 214, 160, 0.25);
+        --cta: #f0a030;
+        --cta-hover: #f5b750;
+        --blue: #5ba8ff;
+        --red: #f06060;
+        --shadow-card: 0 2px 20px rgba(0, 0, 0, 0.35);
+        --shadow-glow: 0 0 60px rgba(6, 214, 160, 0.08);
+        --r-sm: 8px;
+        --r-md: 12px;
+        --r-lg: 18px;
+        --font: "DM Sans", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
       }
-      * { box-sizing: border-box; }
+
+      /* ── Light Theme ───────────────────────────────────────── */
+      [data-theme="light"] {
+        --bg-base: #f5f6f8;
+        --bg-card: #ffffff;
+        --bg-elevated: #eef0f3;
+        --bg-code: #f0f1f4;
+        --border-subtle: rgba(0, 0, 0, 0.08);
+        --border-hover: rgba(0, 0, 0, 0.16);
+        --text-primary: #1a1c20;
+        --text-secondary: #555;
+        --text-muted: #999;
+        --accent: #059669;
+        --accent-dim: rgba(5, 150, 105, 0.1);
+        --accent-glow: rgba(5, 150, 105, 0.15);
+        --cta: #d97706;
+        --cta-hover: #b45309;
+        --blue: #2563eb;
+        --red: #dc2626;
+        --shadow-card: 0 2px 16px rgba(0, 0, 0, 0.08);
+        --shadow-glow: 0 0 40px rgba(5, 150, 105, 0.06);
+      }
+      [data-theme="light"] .nav {
+        background: rgba(245, 246, 248, 0.85);
+      }
+      [data-theme="light"] .nav-cta {
+        color: #fff;
+      }
+      [data-theme="light"] .hero {
+        background-image: none;
+        background-color: var(--bg-base);
+      }
+      [data-theme="light"] .hero::before {
+        background: linear-gradient(135deg, rgba(5,150,105,0.05) 0%, rgba(217,119,6,0.03) 100%);
+      }
+      [data-theme="light"] .terminal-dot:nth-child(1) { background: #ef4444; opacity: 1; }
+      [data-theme="light"] .terminal-dot:nth-child(2) { background: #f59e0b; opacity: 1; }
+      [data-theme="light"] .terminal-dot:nth-child(3) { background: #22c55e; opacity: 1; }
+      [data-theme="light"] .nav-brand img {
+        background: transparent;
+        border-color: rgba(0,0,0,0.1);
+      }
+      [data-theme="light"] .nav-links a:hover {
+        background: rgba(0, 0, 0, 0.05);
+      }
+      [data-theme="light"] .terminal-frame {
+        box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+      }
+      [data-theme="light"] .btn-primary {
+        color: #fff;
+      }
+      [data-theme="light"] .btn-outline {
+        color: var(--text-primary);
+        border-color: rgba(0,0,0,0.15);
+        background: rgba(0,0,0,0.02);
+      }
+      [data-theme="light"] .btn-outline:hover {
+        border-color: rgba(0,0,0,0.25);
+        background: rgba(0,0,0,0.04);
+      }
+      [data-theme="light"] .code-panel pre,
+      [data-theme="light"] .sdk-block pre {
+        color: #444;
+      }
+      [data-theme="light"] .code-panel pre .cm,
+      [data-theme="light"] .sdk-block .cm {
+        color: #999;
+      }
+      [data-theme="light"] .code-panel pre .cmd {
+        color: #1a1c20;
+      }
+      [data-theme="light"] .sdk-block .kw { color: #7c3aed; }
+      [data-theme="light"] .sdk-block .fn { color: #2563eb; }
+      [data-theme="light"] .sdk-block .str { color: #059669; }
+      [data-theme="light"] .sdk-block .type { color: #d97706; }
+      [data-theme="light"] .arch-divider img { opacity: 0.5; filter: invert(0.85) hue-rotate(180deg); }
+      [data-theme="light"] .footer-brand img { background: transparent; }
+
+      /* ── Reset & Base ──────────────────────────────────────── */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html {
+        scroll-behavior: smooth;
+        -webkit-text-size-adjust: 100%;
+      }
       body {
-        margin: 0;
-        font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-        color: var(--ink);
-        background: radial-gradient(circle at 0 0, #eaf2ff 0, var(--bg) 45%);
+        font-family: var(--font);
+        color: var(--text-primary);
+        background: var(--bg-base);
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
       }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      img {
+        display: block;
+        max-width: 100%;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.88em;
+      }
+
+      /* ── Animations ────────────────────────────────────────── */
+      @keyframes fadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(28px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+      @keyframes gradientShift {
+        0% {
+          background-position: 0% 50%;
+        }
+        50% {
+          background-position: 100% 50%;
+        }
+        100% {
+          background-position: 0% 50%;
+        }
+      }
+      /* Base: all content visible, animate on load */
+      .fade-in {
+        animation: fadeUp 0.7s ease both;
+      }
+      .d1 { animation-delay: 0.1s; }
+      .d2 { animation-delay: 0.2s; }
+      .d3 { animation-delay: 0.3s; }
+      .d4 { animation-delay: 0.4s; }
+      .d5 { animation-delay: 0.5s; }
+      .d6 { animation-delay: 0.6s; }
+      .d7 { animation-delay: 0.7s; }
+      .d8 { animation-delay: 0.8s; }
+
+      /* Progressive enhancement: scroll-triggered reveals */
+      @supports (animation-timeline: view()) {
+        .fade-in {
+          animation: fadeUp 0.6s ease both;
+          animation-timeline: view();
+          animation-range: entry 5% entry 35%;
+        }
+        .d1 { animation-delay: 0s; }
+        .d2 { animation-delay: 0s; }
+        .d3 { animation-delay: 0s; }
+        .d4 { animation-delay: 0s; }
+        .d5 { animation-delay: 0s; }
+        .d6 { animation-delay: 0s; }
+        .d7 { animation-delay: 0s; }
+        .d8 { animation-delay: 0s; }
+      }
+
+      /* ── Layout ─────────────────────────────────────────────── */
       .wrap {
-        max-width: 1120px;
+        max-width: 1200px;
         margin: 0 auto;
-        padding: 28px 20px 56px;
-      }
-      .hero {
-        background: linear-gradient(145deg, #ffffff, #eef4ff);
-        border: 1px solid #c8d9f2;
-        border-radius: 14px;
-        padding: 24px;
-      }
-      h1 {
-        margin: 0 0 6px;
-        font-size: 34px;
-        letter-spacing: 0.3px;
-      }
-      .sub {
-        margin: 0;
-        color: var(--muted);
-        font-size: 16px;
-      }
-      .badge {
-        display: inline-block;
-        margin-top: 14px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        border: 1px solid #b9d0f3;
-        background: #eaf2ff;
-        color: #0f3f79;
-        font-size: 12px;
-        font-weight: 600;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
-        margin-top: 14px;
-      }
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 14px;
-      }
-      .card h3 {
-        margin: 0 0 8px;
-        font-size: 16px;
-      }
-      .card p {
-        margin: 0;
-        color: var(--muted);
-        line-height: 1.45;
+        padding: 0 24px;
       }
       .section {
-        margin-top: 24px;
+        padding: 100px 0;
       }
-      .section h2 {
-        margin: 0 0 10px;
-        font-size: 23px;
+      .section + .section {
+        border-top: 1px solid var(--border-subtle);
       }
-      pre {
-        margin: 0;
-        overflow: auto;
-        white-space: pre;
-        background: var(--code-bg);
-        color: var(--code-ink);
-        border-radius: 10px;
-        border: 1px solid #1f2a3f;
-        padding: 12px;
-        font: 13px/1.45 Menlo, Monaco, Consolas, monospace;
+
+      /* ── Navigation ─────────────────────────────────────────── */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
+        background: rgba(12, 13, 15, 0.8);
+        border-bottom: 1px solid var(--border-subtle);
       }
-      .shots {
+      .nav-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 24px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: 0.02em;
+        margin-right: auto;
+        color: var(--text-primary);
+      }
+      .nav-brand img {
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        background: #fff;
+        padding: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .nav-links a {
+        font-size: 13px;
+        color: var(--text-secondary);
+        padding: 6px 12px;
+        border-radius: 6px;
+        transition: color 0.2s, background 0.2s;
+      }
+      .nav-links a:hover {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.05);
+      }
+      /* ── Theme Toggle ─────────────────────────────────────── */
+      .theme-toggle {
+        width: 36px;
+        height: 36px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.2s, border-color 0.2s, background 0.2s;
+        margin-left: 4px;
+        flex-shrink: 0;
+      }
+      .theme-toggle:hover {
+        color: var(--text-primary);
+        border-color: var(--border-hover);
+        background: rgba(255,255,255,0.04);
+      }
+      [data-theme="light"] .theme-toggle:hover {
+        background: rgba(0,0,0,0.04);
+      }
+      .theme-toggle .icon-sun,
+      .theme-toggle .icon-moon { display: none; }
+      [data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+      [data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+      .nav-cta {
+        margin-left: 12px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--bg-base);
+        background: var(--cta);
+        padding: 7px 16px;
+        border-radius: 8px;
+        transition: background 0.2s, transform 0.15s;
+      }
+      .nav-cta:hover {
+        background: var(--cta-hover);
+        transform: translateY(-1px);
+      }
+
+      /* ── Hero ────────────────────────────────────────────────── */
+      .hero {
+        padding: 80px 0 60px;
+        position: relative;
+        overflow: hidden;
+        background: url('./media/hero-bg.jpg') center center / cover no-repeat;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(12,13,15,0.3) 0%, rgba(12,13,15,0.7) 100%);
+        pointer-events: none;
+      }
+      .hero::after {
+        content: "";
+        position: absolute;
+        bottom: -300px;
+        right: -200px;
+        width: 600px;
+        height: 600px;
+        background: radial-gradient(circle, rgba(240, 160, 48, 0.06) 0%, transparent 70%);
+        pointer-events: none;
+      }
+      .hero-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr 1fr;
+        gap: 48px;
+        align-items: center;
+        position: relative;
+        z-index: 1;
+      }
+      .hero-eyebrow {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--accent);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 16px;
+      }
+      .hero h1 {
+        font-size: clamp(36px, 5vw, 56px);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        margin-bottom: 20px;
+      }
+      .hero h1 em {
+        font-style: normal;
+        color: var(--accent);
+      }
+      .hero-sub {
+        font-size: 17px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        max-width: 520px;
+        margin-bottom: 28px;
+      }
+      .hero-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 36px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 22px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.2s;
+        border: 1px solid transparent;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--bg-base);
+        border-color: var(--accent);
+      }
+      .btn-primary:hover {
+        background: #08e8ad;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px var(--accent-glow);
+      }
+      .btn-outline {
+        color: var(--text-primary);
+        border-color: var(--border-hover);
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .btn-outline:hover {
+        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.06);
+        transform: translateY(-1px);
+      }
+      .hero-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .hero-badges span {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-secondary);
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border-subtle);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      /* Hero terminal visual */
+      .hero-visual {
+        position: relative;
+      }
+      .terminal-frame {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-lg);
+        overflow: hidden;
+        box-shadow: var(--shadow-card), var(--shadow-glow);
+      }
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 16px;
+        background: rgba(255, 255, 255, 0.02);
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .terminal-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--text-muted);
+      }
+      .terminal-dot:nth-child(1) { background: var(--red); opacity: 0.7; }
+      .terminal-dot:nth-child(2) { background: var(--cta); opacity: 0.7; }
+      .terminal-dot:nth-child(3) { background: var(--accent); opacity: 0.7; }
+      .terminal-title {
+        margin-left: 8px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+      .terminal-badge {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        padding: 3px 10px;
+        border-radius: 4px;
+      }
+      .badge-operator {
+        color: var(--accent);
+        background: var(--accent-dim);
+      }
+      .badge-agent {
+        color: var(--cta);
+        background: rgba(240, 160, 48, 0.12);
+      }
+      .terminal-frame img {
+        width: 100%;
+        display: block;
+      }
+      .terminal-caption {
+        padding: 12px 16px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        border-top: 1px solid var(--border-subtle);
+      }
+
+      /* ── What Is XYTE ──────────────────────────────────────── */
+      .explain-intro {
+        text-align: center;
+        max-width: 720px;
+        margin: 0 auto 60px;
+      }
+      .explain-intro h2 {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 16px;
+        letter-spacing: -0.01em;
+      }
+      .explain-intro p {
+        font-size: 16px;
+        color: var(--text-secondary);
+        line-height: 1.7;
+      }
+      .pillars {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+      .pillar {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        padding: 28px 24px;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+      .pillar:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-card);
+      }
+      .pillar-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 10px;
+        margin-bottom: 16px;
+        overflow: hidden;
+      }
+      .pillar-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 10px;
+      }
+      .pillar h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .pillar p {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+      }
+
+      /* ── Architecture Illustration ────────────────────────────── */
+      .arch-divider {
+        padding: 0;
+        text-align: center;
+        border-top: 1px solid var(--border-subtle);
+      }
+      .arch-divider img {
+        width: 100%;
+        max-width: 960px;
+        margin: 0 auto;
+        display: block;
+        opacity: 0.7;
+      }
+
+      /* ── Features ───────────────────────────────────────────── */
+      .section-header {
+        margin-bottom: 48px;
+      }
+      .section-header h2 {
+        font-size: 32px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin-bottom: 10px;
+      }
+      .section-header p {
+        font-size: 15px;
+        color: var(--text-secondary);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
         gap: 16px;
       }
-      .shot {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 10px;
+      .feature-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        padding: 24px;
+        transition: border-color 0.25s, transform 0.2s, box-shadow 0.25s;
       }
-      .shot img {
-        width: 100%;
-        border-radius: 8px;
-        border: 1px solid #d7dee9;
+      .feature-card:hover {
+        border-color: var(--border-hover);
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-card);
       }
-      .shot figcaption {
-        margin-top: 8px;
-        color: var(--muted);
+      .feature-card h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .feature-card p {
         font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.55;
+        margin-bottom: 14px;
       }
-      .links {
-        margin-top: 18px;
+      .feature-card code {
+        display: block;
+        font-size: 12px;
+        color: var(--accent);
+        background: var(--bg-code);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border-subtle);
+        white-space: nowrap;
+        overflow-x: auto;
+      }
+
+      /* ── Screenshots ────────────────────────────────────────── */
+      .shots-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+
+      /* ── Code Examples ──────────────────────────────────────── */
+      .code-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .code-panel {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        overflow: hidden;
+      }
+      .code-panel-head {
         display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-subtle);
+        background: rgba(255, 255, 255, 0.02);
       }
-      .links a {
-        text-decoration: none;
-        color: #0f3f79;
-        background: #eaf2ff;
-        border: 1px solid #b9d0f3;
-        border-radius: 999px;
-        padding: 6px 10px;
+      .code-panel-head strong {
+        font-size: 14px;
+      }
+      .code-panel pre {
+        margin: 0;
+        padding: 20px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: var(--text-secondary);
+        overflow-x: auto;
+      }
+      .code-panel pre .cm {
+        color: var(--text-muted);
+      }
+      .code-panel pre .cmd {
+        color: var(--text-primary);
+      }
+      .code-panel pre .flag {
+        color: var(--blue);
+      }
+      .code-panel pre .val {
+        color: var(--accent);
+      }
+
+      /* SDK code block */
+      .sdk-block {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        overflow: hidden;
+        max-width: 700px;
+        margin: 0 auto;
+      }
+      .sdk-block-head {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .sdk-block pre {
+        margin: 0;
+        padding: 20px;
+        font-family: var(--mono);
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--text-secondary);
+        overflow-x: auto;
+      }
+      .sdk-block .kw { color: #c678dd; }
+      .sdk-block .fn { color: var(--blue); }
+      .sdk-block .str { color: var(--accent); }
+      .sdk-block .cm { color: var(--text-muted); }
+      .sdk-block .type { color: var(--cta); }
+
+      /* ── Use Cases ──────────────────────────────────────────── */
+      .usecases-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
+      .usecase {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        padding: 24px;
+        transition: border-color 0.2s;
+      }
+      .usecase:hover {
+        border-color: var(--border-hover);
+      }
+      .usecase-icon {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 12px;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .usecase-icon img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 8px;
+      }
+      .usecase h3 {
+        font-size: 17px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+      .usecase ul {
+        list-style: none;
+        padding: 0;
+      }
+      .usecase li {
+        font-size: 13px;
+        color: var(--text-secondary);
+        padding: 3px 0 3px 16px;
+        position: relative;
+        line-height: 1.5;
+      }
+      .usecase li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 10px;
+        width: 4px;
+        height: 4px;
+        border-radius: 1px;
+        background: var(--accent);
+      }
+
+      /* ── CLI Reference Table ─────────────────────────────────── */
+      .cli-table {
+        width: 100%;
+        border-collapse: collapse;
         font-size: 13px;
       }
-      @media (max-width: 900px) {
-        .grid, .shots { grid-template-columns: 1fr; }
+      .cli-table th,
+      .cli-table td {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      .cli-table th {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .cli-table td {
+        color: var(--text-secondary);
+      }
+      .cli-table td code {
+        color: var(--text-primary);
+        font-size: 12px;
+      }
+      .cli-table tr:hover td {
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .cli-table-wrap {
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        overflow: hidden;
+      }
+
+      /* ── Schemas ─────────────────────────────────────────────── */
+      .schemas-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .schema-chip {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 8px 14px;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        transition: border-color 0.2s, color 0.2s;
+      }
+      .schema-chip:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* ── Quickstart ─────────────────────────────────────────── */
+      .steps-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 48px;
+      }
+      .step {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-md);
+        padding: 24px 20px;
+        position: relative;
+      }
+      .step-num {
+        font-family: var(--mono);
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--accent);
+        opacity: 0.3;
+        line-height: 1;
+        margin-bottom: 12px;
+      }
+      .step h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .step p {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+      }
+      .step code {
+        color: var(--accent);
+      }
+      .cta-block {
+        text-align: center;
+        padding: 48px 24px;
+        background: linear-gradient(135deg, rgba(6, 214, 160, 0.06), rgba(240, 160, 48, 0.04));
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--r-lg);
+      }
+      .cta-block h3 {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .cta-block p {
+        color: var(--text-secondary);
+        margin-bottom: 24px;
+      }
+
+      /* ── Footer ─────────────────────────────────────────────── */
+      .footer {
+        padding: 40px 0;
+        border-top: 1px solid var(--border-subtle);
+      }
+      .footer-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .footer-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .footer-brand img {
+        width: 22px;
+        height: 22px;
+        border-radius: 4px;
+        background: #fff;
+        padding: 2px;
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+      }
+      .footer-links a {
+        font-size: 12px;
+        color: var(--text-muted);
+        transition: color 0.2s;
+      }
+      .footer-links a:hover {
+        color: var(--text-secondary);
+      }
+      .footer-note {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+
+      /* ── Responsive ─────────────────────────────────────────── */
+      @media (max-width: 1040px) {
+        .hero-grid {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+        .pillars {
+          grid-template-columns: 1fr;
+        }
+        .features-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .shots-grid,
+        .code-grid {
+          grid-template-columns: 1fr;
+        }
+        .steps-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .nav-links {
+          display: none;
+        }
+      }
+      @media (max-width: 640px) {
+        .section {
+          padding: 64px 0;
+        }
+        .hero {
+          padding: 48px 0 32px;
+        }
+        .hero h1 {
+          font-size: 32px;
+        }
+        .features-grid,
+        .usecases-grid,
+        .steps-grid {
+          grid-template-columns: 1fr;
+        }
+        .hero-badges {
+          gap: 6px;
+        }
+        .explain-intro h2,
+        .section-header h2 {
+          font-size: 26px;
+        }
+        .nav-cta {
+          display: none;
+        }
+        .footer-inner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
       }
     </style>
   </head>
   <body>
-    <main class="wrap">
-      <section class="hero">
-        <h1>XYTE SDK</h1>
-        <p class="sub">Deterministic CLI + TUI + Headless + MCP utilities for Xyte fleet operations.</p>
-        <span class="badge">Synthetic examples only (no real tenant data)</span>
-        <div class="links">
-          <a href="../README.md">README</a>
-          <a href="./headless-visuals.md">Headless Visuals</a>
-          <a href="./setup.md">Setup Guide</a>
-          <a href="./schemas/">Schemas</a>
+    <!-- ── Navigation ──────────────────────────────────────── -->
+    <header class="nav" role="banner">
+      <div class="nav-inner">
+        <a class="nav-brand" href="#top" aria-label="XYTE SDK home">
+          <img src="./media/xyte-logo.png" alt="" width="30" height="30" />
+          XYTE SDK
+        </a>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="#features">Features</a>
+          <a href="#screenshots">Screenshots</a>
+          <a href="#use-cases">Use Cases</a>
+          <a href="#get-started">Get Started</a>
+          <a href="#docs">Docs</a>
+        </nav>
+        <button class="theme-toggle" aria-label="Toggle light/dark theme" onclick="toggleTheme()">
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+        <a class="nav-cta" href="#get-started">Get Started</a>
+      </div>
+    </header>
+
+    <main>
+      <!-- ── Hero ────────────────────────────────────────────── -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap">
+          <div class="hero-grid">
+            <div class="fade-in">
+              <p class="hero-eyebrow">TypeScript SDK + CLI + TUI</p>
+              <h1 id="hero-title">
+                Fleet operations<br />for humans and <em>AI&nbsp;agents</em>.
+              </h1>
+              <p class="hero-sub">
+                One SDK to manage IoT devices across tenants. Interactive TUI for
+                operators, headless JSON for agents, MCP tools for orchestration.
+                Install once, run <code>xyte</code>, paste your API key.
+              </p>
+              <div class="hero-actions">
+                <a class="btn btn-primary" href="#get-started">Get Started</a>
+                <a
+                  class="btn btn-outline"
+                  href="https://github.com/xyte-io/xyte-sdk"
+                  target="_blank"
+                  rel="noopener"
+                  >View on GitHub</a
+                >
+              </div>
+              <div class="hero-badges fade-in d4">
+                <span>Read-only by default</span>
+                <span>Guarded writes</span>
+                <span>Schema-locked outputs</span>
+                <span>MCP tools built in</span>
+              </div>
+            </div>
+            <div class="hero-visual fade-in d3">
+              <div class="terminal-frame">
+                <div class="terminal-bar">
+                  <span class="terminal-dot"></span>
+                  <span class="terminal-dot"></span>
+                  <span class="terminal-dot"></span>
+                  <span class="terminal-title">xyte tui — acme-demo</span>
+                  <span class="terminal-badge badge-operator">Operator</span>
+                </div>
+                <img
+                  src="./media/tui-dashboard-synthetic.png"
+                  alt="XYTE TUI interactive dashboard showing device KPIs, incidents table, and ticket list"
+                  loading="eager"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="section grid">
-        <article class="card">
-          <h3>Quick Start</h3>
-          <p>Run <code>xyte</code>, paste your API key, then access your dashboard. For automation, pass <code>--tenant</code> and use JSON outputs.</p>
-        </article>
-        <article class="card">
-          <h3>Safety by Default</h3>
-          <p>Read-only by default. Non-read endpoint calls require <code>--allow-write</code>. Destructive calls require <code>--confirm &lt;endpoint-key&gt;</code>.</p>
-        </article>
-        <article class="card">
-          <h3>Headless for Agents</h3>
-          <p>Use <code>xyte tui --headless --format json</code> and parse NDJSON runtime frames with contract <code>xyte.headless.frame.v1</code>.</p>
-        </article>
-        <article class="card">
-          <h3>Reporting</h3>
-          <p>Generate branded PDF findings with <code>xyte report generate</code>. Default output is redacted unless <code>--include-sensitive</code> is used.</p>
-        </article>
-      </section>
-
-      <section class="section">
-        <h2>End-to-End Command Flow</h2>
-        <pre>npm install
-npm run build
-xyte
-xyte setup status --tenant acme-demo --format json
-xyte inspect deep-dive --tenant acme-demo --window 24 --format json > /tmp/deep-dive.json
-xyte report generate --tenant acme-demo --input /tmp/deep-dive.json --out /tmp/xyte-findings.pdf
-xyte tui --headless --screen dashboard --format json --once --tenant acme-demo
-xyte mcp serve</pre>
-      </section>
-
-      <section class="section">
-        <h2>Screenshots (Synthetic)</h2>
-        <div class="shots">
-          <figure class="shot">
-            <img src="./media/tui-dashboard-synthetic.png" alt="Synthetic XYTE TUI dashboard screenshot" />
-            <figcaption>TUI dashboard view with synthetic KPIs and incident/ticket panels.</figcaption>
-          </figure>
-          <figure class="shot">
-            <img src="./media/headless-frame-synthetic.png" alt="Synthetic XYTE headless JSON frame screenshot" />
-            <figcaption>Headless runtime frame example (<code>xyte.headless.frame.v1</code>) with synthetic data.</figcaption>
-          </figure>
+      <!-- ── What Is XYTE ──────────────────────────────────── -->
+      <section class="section" id="what" aria-labelledby="what-title">
+        <div class="wrap">
+          <div class="explain-intro fade-in">
+            <h2 id="what-title">What is XYTE SDK?</h2>
+            <p>
+              Xyte is an IoT device management platform. The XYTE SDK gives you
+              programmatic access to the entire platform &mdash; devices, spaces,
+              incidents, tickets, and fleet analytics &mdash; through a
+              type-safe TypeScript client, a deterministic CLI, and an
+              interactive terminal UI.
+            </p>
+          </div>
+          <div class="pillars">
+            <article class="pillar fade-in d1">
+              <div class="pillar-icon" aria-hidden="true"><img src="./media/icon-operator.png" alt="" width="48" height="48" /></div>
+              <h3>For Operators</h3>
+              <p>
+                Interactive TUI with 8 screens. Inspect fleets, triage
+                incidents, manage tickets, and generate branded PDF reports.
+                Setup gating ensures readiness before operations.
+              </p>
+            </article>
+            <article class="pillar fade-in d2">
+              <div class="pillar-icon" aria-hidden="true"><img src="./media/icon-developer.png" alt="" width="48" height="48" /></div>
+              <h3>For Developers</h3>
+              <p>
+                TypeScript SDK with typed namespaces:
+                <code>client.device.*</code>,
+                <code>client.organization.*</code>,
+                <code>client.partner.*</code>. Call any endpoint safely with
+                built-in guards for writes and deletes.
+              </p>
+            </article>
+            <article class="pillar fade-in d3">
+              <div class="pillar-icon" aria-hidden="true"><img src="./media/icon-agent.png" alt="" width="48" height="48" /></div>
+              <h3>For AI Agents</h3>
+              <p>
+                Headless JSON mode emits versioned NDJSON frames. MCP tool
+                server exposes 7 tools for orchestration. All outputs are
+                deterministic, parseable, and schema-validated.
+              </p>
+            </article>
+          </div>
         </div>
       </section>
 
-      <section class="section">
-        <h2>Synthetic JSON Example</h2>
-        <pre>{
-  "schemaVersion": "xyte.call.envelope.v1",
-  "requestId": "req_demo_123",
-  "tenantId": "acme-demo",
-  "endpointKey": "organization.devices.getDevices",
-  "method": "GET",
-  "guard": { "allowWrite": false },
-  "response": { "status": 200, "durationMs": 184, "retryCount": 0, "data": { "items": [] } }
-}</pre>
+      <!-- ── Architecture Illustration ──────────────────────── -->
+      <div class="arch-divider fade-in">
+        <img
+          src="./media/architecture-illustration.jpg"
+          alt="XYTE SDK architecture: central hub connecting IoT devices, operator TUI, and AI agents"
+          loading="lazy"
+        />
+      </div>
+
+      <!-- ── Features ──────────────────────────────────────── -->
+      <section class="section" id="features" aria-labelledby="features-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="features-title">Features</h2>
+            <p>
+              Everything you need to operate device fleets at scale &mdash; from a single CLI.
+            </p>
+          </div>
+          <div class="features-grid">
+            <article class="feature-card fade-in d1">
+              <h3>Multi-Tenant Profiles</h3>
+              <p>
+                Switch between tenants and named API key slots. Keys stored in macOS Keychain or Linux secret-tool.
+              </p>
+              <code>xyte tenant use acme && xyte auth key use --slot primary</code>
+            </article>
+            <article class="feature-card fade-in d2">
+              <h3>Interactive TUI</h3>
+              <p>
+                8 operational screens: setup, config, dashboard, spaces, devices, incidents, tickets, and copilot. Full keyboard navigation.
+              </p>
+              <code>xyte tui --tenant acme</code>
+            </article>
+            <article class="feature-card fade-in d3">
+              <h3>Headless Mode</h3>
+              <p>
+                JSON-only NDJSON frames for agent consumption. Schema-versioned contracts. One-shot or streaming with reconnect metadata.
+              </p>
+              <code>xyte tui --headless --screen dashboard --format json --once</code>
+            </article>
+            <article class="feature-card fade-in d4">
+              <h3>Fleet Analytics</h3>
+              <p>
+                <code>inspect fleet</code> for health summaries. <code>inspect deep-dive</code> for 24h/72h/168h windows. Generate branded PDF reports.
+              </p>
+              <code>xyte report generate --input deep-dive.json --out report.pdf</code>
+            </article>
+            <article class="feature-card fade-in d5">
+              <h3>MCP Server</h3>
+              <p>
+                <code>xyte mcp serve</code> exposes 7 structured tools for external agent frameworks: setup, doctor, endpoints, call, inspect, report.
+              </p>
+              <code>xyte mcp serve</code>
+            </article>
+            <article class="feature-card fade-in d6">
+              <h3>Guarded Mutations</h3>
+              <p>
+                Read-only by default. <code>--allow-write</code> for mutations.
+                <code>--confirm &lt;key&gt;</code> for destructive operations. Three-tier safety.
+              </p>
+              <code>Read &#8594; --allow-write &#8594; --confirm &lt;key&gt;</code>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Screenshots ───────────────────────────────────── -->
+      <section class="section" id="screenshots" aria-labelledby="shots-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="shots-title">See It in Action</h2>
+            <p>
+              Interactive TUI for human operators. Headless JSON for AI agents.
+              Same data, two interfaces.
+            </p>
+          </div>
+          <div class="shots-grid">
+            <div class="terminal-frame fade-in d1">
+              <div class="terminal-bar">
+                <span class="terminal-dot"></span>
+                <span class="terminal-dot"></span>
+                <span class="terminal-dot"></span>
+                <span class="terminal-title">xyte tui</span>
+                <span class="terminal-badge badge-operator">Operator</span>
+              </div>
+              <img
+                src="./media/tui-dashboard-synthetic.png"
+                alt="XYTE TUI dashboard with KPIs, incidents table, and ticket list using synthetic data"
+                loading="lazy"
+              />
+              <div class="terminal-caption">
+                Interactive TUI dashboard &mdash; KPIs, incidents, and tickets at a glance.
+              </div>
+            </div>
+            <div class="terminal-frame fade-in d2">
+              <div class="terminal-bar">
+                <span class="terminal-dot"></span>
+                <span class="terminal-dot"></span>
+                <span class="terminal-dot"></span>
+                <span class="terminal-title">xyte tui --headless</span>
+                <span class="terminal-badge badge-agent">Agent</span>
+              </div>
+              <img
+                src="./media/headless-frame-synthetic.png"
+                alt="XYTE headless JSON frame output with schema version, panels, and metadata"
+                loading="lazy"
+              />
+              <div class="terminal-caption">
+                Headless NDJSON frame &mdash; deterministic, schema-validated output for agents.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Code Examples ─────────────────────────────────── -->
+      <section class="section" id="workflows" aria-labelledby="workflows-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="workflows-title">Copy &amp; Paste Workflows</h2>
+            <p>
+              Production-safe flows for operators and AI agents. Replace tenant
+              IDs and keys with your own.
+            </p>
+          </div>
+          <div class="code-grid">
+            <div class="code-panel fade-in d1">
+              <div class="code-panel-head">
+                <strong>Operator Workflow</strong>
+                <span class="terminal-badge badge-operator">Human</span>
+              </div>
+              <pre><span class="cm"># Install and onboard</span>
+<span class="cmd">npm install</span> && <span class="cmd">npm run build</span>
+<span class="cmd">xyte</span>
+
+<span class="cm"># Inspect fleet health</span>
+<span class="cmd">xyte inspect fleet</span> <span class="flag">--tenant</span> <span class="val">acme</span> <span class="flag">--format</span> <span class="val">ascii</span>
+
+<span class="cm"># Generate PDF report</span>
+<span class="cmd">xyte inspect deep-dive</span> <span class="flag">--tenant</span> <span class="val">acme</span> <span class="flag">--window</span> <span class="val">24</span> <span class="flag">--format</span> <span class="val">json</span> &gt; /tmp/dd.json
+<span class="cmd">xyte report generate</span> <span class="flag">--input</span> /tmp/dd.json <span class="flag">--out</span> /tmp/report.pdf
+
+<span class="cm"># Open interactive dashboard</span>
+<span class="cmd">xyte tui</span> <span class="flag">--tenant</span> <span class="val">acme</span></pre>
+            </div>
+            <div class="code-panel fade-in d2">
+              <div class="code-panel-head">
+                <strong>Agent Workflow</strong>
+                <span class="terminal-badge badge-agent">Machine</span>
+              </div>
+              <pre><span class="cm"># Verify readiness</span>
+<span class="cmd">xyte setup status</span> <span class="flag">--tenant</span> <span class="val">acme</span> <span class="flag">--format</span> <span class="val">json</span>
+<span class="cmd">xyte config doctor</span> <span class="flag">--tenant</span> <span class="val">acme</span> <span class="flag">--format</span> <span class="val">json</span>
+
+<span class="cm"># Call endpoint with envelope</span>
+<span class="cmd">xyte call</span> <span class="val">organization.devices.getDevices</span> \
+  <span class="flag">--tenant</span> <span class="val">acme</span> <span class="flag">--output-mode</span> <span class="val">envelope</span> <span class="flag">--strict-json</span>
+
+<span class="cm"># Headless snapshot</span>
+<span class="cmd">xyte tui</span> <span class="flag">--headless</span> <span class="flag">--screen</span> <span class="val">dashboard</span> <span class="flag">--format</span> <span class="val">json</span> <span class="flag">--once</span>
+
+<span class="cm"># Start MCP server</span>
+<span class="cmd">xyte mcp serve</span></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── SDK Usage ─────────────────────────────────────── -->
+      <section class="section" id="sdk" aria-labelledby="sdk-title">
+        <div class="wrap">
+          <div class="section-header fade-in" style="text-align: center;">
+            <h2 id="sdk-title">TypeScript SDK</h2>
+            <p>Type-safe client with namespaced endpoints and a generic call method.</p>
+          </div>
+          <div class="sdk-block fade-in d1">
+            <div class="sdk-block-head">sdk-example.ts</div>
+            <pre><span class="kw">import</span> { <span class="fn">createXyteClient</span> } <span class="kw">from</span> <span class="str">'@xyte/sdk'</span>;
+
+<span class="kw">const</span> client = <span class="fn">createXyteClient</span>();
+
+<span class="cm">// Typed namespace access</span>
+<span class="kw">const</span> devices = <span class="kw">await</span> client.<span class="fn">organization</span>.<span class="fn">getDevices</span>({ <span class="type">tenantId</span>: <span class="str">'acme'</span> });
+
+<span class="cm">// Generic endpoint call</span>
+<span class="kw">const</span> tickets = <span class="kw">await</span> client.<span class="fn">call</span>(<span class="str">'partner.tickets.getTickets'</span>, { <span class="type">tenantId</span>: <span class="str">'acme'</span> });</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Use Cases ─────────────────────────────────────── -->
+      <section class="section" id="use-cases" aria-labelledby="uc-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="uc-title">Use Cases</h2>
+            <p>How teams use the XYTE SDK in production.</p>
+          </div>
+          <div class="usecases-grid">
+            <article class="usecase fade-in d1">
+              <div class="usecase-icon" aria-hidden="true"><img src="./media/uc-noc.png" alt="" width="40" height="40" /></div>
+              <h3>MSP / NOC Daily Operations</h3>
+              <ul>
+                <li>Run <code>inspect fleet</code> and <code>deep-dive</code> for tenant health</li>
+                <li>Generate daily 24h/72h PDF reports for operations reviews</li>
+                <li>Use guarded endpoint calls for controlled remediation</li>
+              </ul>
+            </article>
+            <article class="usecase fade-in d2">
+              <div class="usecase-icon" aria-hidden="true"><img src="./media/uc-manufacturer.png" alt="" width="40" height="40" /></div>
+              <h3>Manufacturer Reliability</h3>
+              <ul>
+                <li>Track incident concentration by model/device over time windows</li>
+                <li>Use data-quality signals to identify telemetry inconsistencies</li>
+                <li>Send targeted commands with write guards for safe remote actions</li>
+              </ul>
+            </article>
+            <article class="usecase fade-in d3">
+              <div class="usecase-icon" aria-hidden="true"><img src="./media/uc-enterprise.png" alt="" width="40" height="40" /></div>
+              <h3>Enterprise AV/IT Teams</h3>
+              <ul>
+                <li>Monitor spaces, devices, incidents, and tickets from TUI dashboard</li>
+                <li>Correlate active incidents with open tickets to prioritize resolution</li>
+                <li>Export PDF snapshots for operations and management reporting</li>
+              </ul>
+            </article>
+            <article class="usecase fade-in d4">
+              <div class="usecase-icon" aria-hidden="true"><img src="./media/uc-ai.png" alt="" width="40" height="40" /></div>
+              <h3>AI Agent Integration</h3>
+              <ul>
+                <li>Consume JSON-only headless frames and envelope outputs deterministically</li>
+                <li>Validate payloads against JSON schemas in CI before production loops</li>
+                <li>Run MCP tool server for structured tool calls from agent frameworks</li>
+              </ul>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── CLI Reference ─────────────────────────────────── -->
+      <section class="section" id="cli" aria-labelledby="cli-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="cli-title">CLI Command Reference</h2>
+            <p>Deterministic command surface with guarded mutations and schema-locked outputs.</p>
+          </div>
+          <div class="cli-table-wrap fade-in d1">
+            <table class="cli-table" aria-label="CLI command map">
+              <thead>
+                <tr>
+                  <th>Goal</th>
+                  <th>Command</th>
+                  <th>Output</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Readiness</td>
+                  <td><code>xyte setup status --format json</code></td>
+                  <td>Setup + connectivity status</td>
+                </tr>
+                <tr>
+                  <td>Diagnostics</td>
+                  <td><code>xyte config doctor --format json</code></td>
+                  <td>Connectivity diagnostics</td>
+                </tr>
+                <tr>
+                  <td>Discover endpoints</td>
+                  <td><code>xyte list-endpoints</code></td>
+                  <td>Available endpoint keys</td>
+                </tr>
+                <tr>
+                  <td>Read data</td>
+                  <td><code>xyte call &lt;key&gt; --output-mode envelope</code></td>
+                  <td><code>xyte.call.envelope.v1</code></td>
+                </tr>
+                <tr>
+                  <td>Write data</td>
+                  <td><code>xyte call &lt;key&gt; --allow-write</code></td>
+                  <td>Guarded write execution</td>
+                </tr>
+                <tr>
+                  <td>Fleet health</td>
+                  <td><code>xyte inspect fleet --format json</code></td>
+                  <td><code>xyte.inspect.fleet.v1</code></td>
+                </tr>
+                <tr>
+                  <td>Deep analytics</td>
+                  <td><code>xyte inspect deep-dive --window 24</code></td>
+                  <td><code>xyte.inspect.deep-dive.v1</code></td>
+                </tr>
+                <tr>
+                  <td>PDF report</td>
+                  <td><code>xyte report generate --input &lt;json&gt; --out &lt;pdf&gt;</code></td>
+                  <td><code>xyte.report.v1</code> + PDF</td>
+                </tr>
+                <tr>
+                  <td>Headless</td>
+                  <td><code>xyte tui --headless --screen dashboard --once</code></td>
+                  <td><code>xyte.headless.frame.v1</code></td>
+                </tr>
+                <tr>
+                  <td>MCP tools</td>
+                  <td><code>xyte mcp serve</code></td>
+                  <td>7 structured tools</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Schemas ────────────────────────────────────────── -->
+      <section class="section" id="schemas" aria-labelledby="schemas-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="schemas-title">Machine Contracts</h2>
+            <p>Versioned JSON schemas for CI validation and agent payload checks.</p>
+          </div>
+          <div class="schemas-row fade-in d1">
+            <a class="schema-chip" href="./schemas/call-envelope.v1.schema.json">xyte.call.envelope.v1</a>
+            <a class="schema-chip" href="./schemas/headless-frame.v1.schema.json">xyte.headless.frame.v1</a>
+            <a class="schema-chip" href="./schemas/inspect-fleet.v1.schema.json">xyte.inspect.fleet.v1</a>
+            <a class="schema-chip" href="./schemas/inspect-deep-dive.v1.schema.json">xyte.inspect.deep-dive.v1</a>
+            <a class="schema-chip" href="./schemas/report.v1.schema.json">xyte.report.v1</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Get Started ───────────────────────────────────── -->
+      <section class="section" id="get-started" aria-labelledby="qs-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="qs-title">Get Started</h2>
+            <p>From zero to fleet operations in four steps.</p>
+          </div>
+          <div class="steps-grid">
+            <article class="step fade-in d1">
+              <div class="step-num">01</div>
+              <h3>Install</h3>
+              <p><code>npm install</code> then <code>npm run build</code> in the SDK directory.</p>
+            </article>
+            <article class="step fade-in d2">
+              <div class="step-num">02</div>
+              <h3>Run</h3>
+              <p>Execute <code>xyte</code>. The setup wizard asks for your API key and an optional tenant label.</p>
+            </article>
+            <article class="step fade-in d3">
+              <div class="step-num">03</div>
+              <h3>Verify</h3>
+              <p>Confirm readiness with <code>xyte setup status --format json</code>.</p>
+            </article>
+            <article class="step fade-in d4">
+              <div class="step-num">04</div>
+              <h3>Operate</h3>
+              <p>Use inspect, report, headless, and MCP commands for daily operations.</p>
+            </article>
+          </div>
+          <div class="cta-block fade-in d5">
+            <h3>Start building with XYTE SDK</h3>
+            <p>Install the SDK, connect your fleet, and start operating.</p>
+            <a
+              class="btn btn-primary"
+              href="https://github.com/xyte-io/xyte-sdk"
+              target="_blank"
+              rel="noopener"
+              >View on GitHub</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Docs Map ──────────────────────────────────────── -->
+      <section class="section" id="docs" aria-labelledby="docs-title">
+        <div class="wrap">
+          <div class="section-header fade-in">
+            <h2 id="docs-title">Documentation</h2>
+            <p>Start here and drill down where needed.</p>
+          </div>
+          <div class="schemas-row fade-in d1">
+            <a class="schema-chip" href="./setup.md">Setup Guide</a>
+            <a class="schema-chip" href="./tui.md">TUI Guide</a>
+            <a class="schema-chip" href="./headless-visuals.md">Headless Contract</a>
+            <a class="schema-chip" href="./endpoints.md">Endpoint Catalog</a>
+            <a class="schema-chip" href="./config.md">Config &amp; Profiles</a>
+            <a class="schema-chip" href="./llm-providers.md">LLM Providers</a>
+            <a class="schema-chip" href="./drift-notes.md">Route Drift Notes</a>
+          </div>
+        </div>
       </section>
     </main>
+
+    <!-- ── Footer ──────────────────────────────────────────── -->
+    <footer class="footer" role="contentinfo">
+      <div class="wrap">
+        <div class="footer-inner">
+          <div class="footer-brand">
+            <img src="./media/xyte-logo.png" alt="" width="22" height="22" />
+            XYTE SDK
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/xyte-io/xyte-sdk" target="_blank" rel="noopener">GitHub</a>
+            <a href="./setup.md">Documentation</a>
+            <a href="./schemas/report.v1.schema.json">Schemas</a>
+            <a href="https://github.com/xyte-io/xyte-sdk/blob/master/README.md" target="_blank" rel="noopener">README</a>
+          </div>
+          <p class="footer-note">
+            All screenshots and payload snippets use synthetic data.
+          </p>
+        </div>
+      </div>
+    </footer>
+    <script>
+      function toggleTheme() {
+        var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        try { localStorage.setItem('xyte-theme', t); } catch(e) {}
+      }
+      (function() {
+        try {
+          var saved = localStorage.getItem('xyte-theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', saved);
+          } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        } catch(e) {}
+      })();
+    </script>
   </body>
 </html>
