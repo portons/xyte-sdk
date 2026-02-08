@@ -37,6 +37,10 @@ export const SCREEN_PANE_CONFIG: Record<TuiScreenId, ScreenPaneConfig> = {
   copilot: {
     panes: ['prompt-input', 'provider-box', 'output-box'],
     defaultPane: 'prompt-input'
+  },
+  network: {
+    panes: ['network-table', 'network-detail'],
+    defaultPane: 'network-table'
   }
 };
 

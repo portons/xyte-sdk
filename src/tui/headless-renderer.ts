@@ -17,6 +17,7 @@ import {
   loadSpacesData,
   loadTicketsData
 } from './data-loaders';
+import { runDiscoveryScan } from '../discovery/manager';
 import {
   createHeadlessFrame,
   sceneFromConfigState,
@@ -24,6 +25,7 @@ import {
   sceneFromDashboardState,
   sceneFromDevicesState,
   sceneFromIncidentsState,
+  sceneFromNetworkState,
   sceneFromSetupState,
   sceneFromSpacesState,
   sceneFromTicketsState,
@@ -498,6 +500,36 @@ async function buildOperationalFrame(options: {
         }
       });
     }
+
+    case 'network': {
+      const scanResult = await runDiscoveryScan({ mode: 'quick' });
+      const panels = sceneFromNetworkState({
+        devices: scanResult.devices,
+        selectedIndex: 0,
+        searchText: '',
+        scanMode: 'quick',
+        scanning: false,
+        durationMs: scanResult.summary.durationMs
+      });
+      return createHeadlessFrame({
+        sessionId: options.sessionId,
+        sequence: options.sequence,
+        screen: 'network',
+        title: 'Network',
+        status: `Network scan: ${scanResult.devices.length} device${scanResult.devices.length !== 1 ? 's' : ''} found`,
+        tenantId: options.tenantId,
+        motionEnabled: options.motionEnabled,
+        motionPhase: options.motionPhase,
+        logo: XYTE_LOGO_COMPACT,
+        panels,
+        meta: {
+          ...withNavigationMeta('network', {
+            renderSafety: inferRenderSafety(panels),
+            readiness: options.readiness.state
+          })
+        }
+      });
+    }
   }
 }
 
@@ -618,7 +650,7 @@ export async function runHeadlessRenderer(options: HeadlessRenderOptions): Promi
       });
 
       const requestedScreen = options.screen;
-      const blocked = readiness.state !== 'ready' && !['setup', 'config'].includes(requestedScreen);
+      const blocked = readiness.state !== 'ready' && !['setup', 'config', 'network'].includes(requestedScreen);
       const actualScreen: TuiScreenId = blocked ? 'setup' : requestedScreen;
 
       let frame: HeadlessFrame;

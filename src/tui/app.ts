@@ -12,6 +12,7 @@ import { createDevicesScreen } from './screens/devices';
 import { createIncidentsScreen } from './screens/incidents';
 import { createTicketsScreen } from './screens/tickets';
 import { createCopilotScreen } from './screens/copilot';
+import { createNetworkScreen } from './screens/network';
 import type { XyteClient } from '../types/client';
 import type { LLMService } from '../llm/provider';
 import type { ProfileStore } from '../secure/profile-store';
@@ -77,7 +78,7 @@ async function renderStartupSequence(
 }
 
 function canOpenScreen(id: TuiScreenId, readiness: ReadinessCheck | undefined): boolean {
-  if (id === 'setup' || id === 'config') {
+  if (id === 'setup' || id === 'config' || id === 'network') {
     return true;
   }
   return readiness?.state === 'ready';
@@ -464,7 +465,8 @@ export async function runTuiApp(options: TuiAppOptions): Promise<void> {
       devices: createDevicesScreen(),
       incidents: createIncidentsScreen(),
       tickets: createTicketsScreen(),
-      copilot: createCopilotScreen()
+      copilot: createCopilotScreen(),
+      network: createNetworkScreen()
     };
 
     let mounted: TuiScreen | undefined;
@@ -660,6 +662,10 @@ export async function runTuiApp(options: TuiAppOptions): Promise<void> {
       }
       if (ch === 'p') {
         await mountScreen('copilot');
+        return;
+      }
+      if (ch === 'w') {
+        await mountScreen('network');
         return;
       }
 

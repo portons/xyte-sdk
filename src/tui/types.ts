@@ -12,7 +12,7 @@ import type {
   TicketDraftResult
 } from '../workflows/types';
 
-export type TuiScreenId = 'setup' | 'config' | 'dashboard' | 'spaces' | 'devices' | 'incidents' | 'tickets' | 'copilot';
+export type TuiScreenId = 'setup' | 'config' | 'dashboard' | 'spaces' | 'devices' | 'incidents' | 'tickets' | 'copilot' | 'network';
 export type TuiPaneId = string;
 export type TuiArrowKey = 'up' | 'down' | 'left' | 'right';
 export type TuiArrowHandleResult = 'handled' | 'boundary' | 'unhandled';

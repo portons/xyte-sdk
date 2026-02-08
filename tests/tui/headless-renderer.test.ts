@@ -85,7 +85,7 @@ describe('headless renderer', () => {
     expect((runtimeFrame?.meta as any)?.navigationMode).toBe('pane-focus');
     expect((runtimeFrame?.meta as any)?.refreshState).toBeDefined();
     expect((runtimeFrame?.meta as any)?.tabId).toBe('spaces');
-    expect((runtimeFrame?.meta as any)?.tabOrder).toEqual(['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot']);
+    expect((runtimeFrame?.meta as any)?.tabOrder).toEqual(['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot', 'network']);
     expect((runtimeFrame?.meta as any)?.tabNavBoundary).toBeNull();
     expect((runtimeFrame?.meta as any)?.renderSafety).toBeDefined();
     expect((runtimeFrame?.meta as any)?.tableFormat).toBe('compact-v1');
@@ -257,7 +257,7 @@ describe('headless renderer', () => {
       expect((runtimeFrame?.meta as any)?.activePane).toBe(SCREEN_PANE_CONFIG[screen].defaultPane);
       expect((runtimeFrame?.meta as any)?.availablePanes).toEqual(SCREEN_PANE_CONFIG[screen].panes);
       expect((runtimeFrame?.meta as any)?.tabId).toBe(screen);
-      expect((runtimeFrame?.meta as any)?.tabOrder).toEqual(['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot']);
+      expect((runtimeFrame?.meta as any)?.tabOrder).toEqual(['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot', 'network']);
       expect((runtimeFrame?.meta as any)?.renderSafety).toBeDefined();
       expect((runtimeFrame?.meta as any)?.tableFormat).toBe('compact-v1');
     }

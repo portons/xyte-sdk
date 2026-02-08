@@ -30,6 +30,9 @@ import {
   generateFleetReport
 } from '../workflows/fleet-insights';
 import { createMcpServer } from '../mcp/server';
+import { runDiscoveryScan } from '../discovery/manager';
+import { formatScanTable, formatScanAscii } from '../discovery/format';
+import type { ScanMode, ScanProtocol } from '../discovery/types';
 
 type OutputStream = Pick<typeof process.stdout, 'write'>;
 type ErrorStream = Pick<typeof process.stderr, 'write'>;
@@ -1308,7 +1311,7 @@ export function createCli(runtime: CliRuntime = {}): Command {
     .command('tui')
     .description('Launch the full-screen TUI')
     .option('--headless', 'Run headless visual mode for agents')
-    .option('--screen <screen>', 'setup|config|dashboard|spaces|devices|incidents|tickets|copilot', 'dashboard')
+    .option('--screen <screen>', 'setup|config|dashboard|spaces|devices|incidents|tickets|copilot|network', 'dashboard')
     .option('--format <format>', 'json|text (headless is json-only)', 'json')
     .option('--once', 'Render one frame and exit (default behavior)')
     .option('--follow', 'Continuously stream frames')
@@ -1333,7 +1336,7 @@ export function createCli(runtime: CliRuntime = {}): Command {
       const client = createXyteClient({ profileStore, keychain });
       const llmService = new LLMService({ profileStore, keychain });
 
-      const allowedScreens: TuiScreenId[] = ['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot'];
+      const allowedScreens: TuiScreenId[] = ['setup', 'config', 'dashboard', 'spaces', 'devices', 'incidents', 'tickets', 'copilot', 'network'];
       const screen = (options.screen ?? 'dashboard') as TuiScreenId;
       if (!allowedScreens.includes(screen)) {
         throw new Error(`Invalid screen: ${options.screen}`);
@@ -1382,6 +1385,86 @@ export function createCli(runtime: CliRuntime = {}): Command {
       stderr.write(text);
     }
   });
+
+  const discover = program.command('discover').description('Local network device discovery');
+
+  discover
+    .command('network')
+    .description('Scan local network for connected devices')
+    .option('--mode <mode>', 'quick|full', 'quick')
+    .option('--format <format>', 'json|table|ascii', 'table')
+    .option('--timeout <ms>', 'Scan timeout in milliseconds')
+    .option('--protocols <list>', 'Comma-separated: mdns,ssdp,arp,tcp')
+    .option('--subnet <cidr>', 'Override auto-detected subnet')
+    .option('--select', 'Interactive device selection after scan')
+    .option('--strict-json', 'Fail on non-serializable output')
+    .action(async (options: {
+      mode?: string;
+      format?: string;
+      timeout?: string;
+      protocols?: string;
+      subnet?: string;
+      select?: boolean;
+      strictJson?: boolean;
+    }) => {
+      const mode = (options.mode ?? 'quick') as ScanMode;
+      if (!['quick', 'full'].includes(mode)) {
+        throw new Error(`Invalid mode: ${mode}. Use quick|full.`);
+      }
+      const format = options.format ?? 'table';
+      if (!['json', 'table', 'ascii'].includes(format)) {
+        throw new Error(`Invalid format: ${format}. Use json|table|ascii.`);
+      }
+      const timeout = options.timeout ? parseInt(options.timeout, 10) : undefined;
+      const protocols = options.protocols
+        ? (options.protocols.split(',').map(p => p.trim()) as ScanProtocol[])
+        : undefined;
+
+      const result = await runDiscoveryScan({
+        mode,
+        timeout,
+        protocols,
+        subnet: options.subnet,
+      });
+
+      if (options.select) {
+        if (!process.stdin.isTTY) {
+          throw new Error('--select requires interactive terminal');
+        }
+        if (result.devices.length === 0) {
+          throw new Error('No devices found to select.');
+        }
+
+        stderr.write(`${formatScanTable(result)}\n\n`);
+
+        let selectedIndex = -1;
+        while (selectedIndex < 0) {
+          const answer = await promptValue({
+            question: `Select device (1-${result.devices.length})`,
+            stdout: stderr as unknown as OutputStream
+          });
+          const num = parseInt(answer, 10);
+          if (Number.isFinite(num) && num >= 1 && num <= result.devices.length) {
+            selectedIndex = num - 1;
+          } else {
+            stderr.write(`Invalid selection. Enter a number between 1 and ${result.devices.length}.\n`);
+          }
+        }
+
+        printJson(stdout, result.devices[selectedIndex]);
+        return;
+      }
+
+      if (format === 'table') {
+        stdout.write(`${formatScanTable(result)}\n`);
+        return;
+      }
+      if (format === 'ascii') {
+        stdout.write(`${formatScanAscii(result)}\n`);
+        return;
+      }
+      printJson(stdout, result, { strictJson: options.strictJson });
+    });
 
   return program;
 }

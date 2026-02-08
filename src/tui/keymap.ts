@@ -11,6 +11,7 @@ export const GLOBAL_KEYMAP: Array<{ keys: string; description: string }> = [
   { keys: 'i', description: 'Incidents' },
   { keys: 't', description: 'Tickets' },
   { keys: 'p', description: 'Copilot' },
+  { keys: 'w', description: 'Network' },
   { keys: 'r', description: 'Refresh current screen' },
   { keys: '/', description: 'Search or filter in current screen' },
   { keys: 'o', description: 'Override LLM provider/model for this session' },
@@ -28,5 +29,6 @@ export const SCREEN_ACTION_KEYMAP: Array<{ keys: string; description: string }> 
   { keys: 'Tickets: R or rr', description: 'Mark selected ticket as resolved (with confirmation)' },
   { keys: 'Copilot: Enter', description: 'Run free-form copilot prompt' },
   { keys: 'Copilot: h', description: 'Generate fleet health summary' },
-  { keys: 'Copilot: s', description: 'Generate command suggestions' }
+  { keys: 'Copilot: s', description: 'Generate command suggestions' },
+  { keys: 'Network: n/f', description: 'Quick/full scan, Enter to select device' }
 ];

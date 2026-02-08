@@ -1,3 +1,4 @@
+import type { DiscoveredDevice } from '../discovery/types';
 import type { TuiScreenId } from './types';
 import { safePreviewLines } from './serialize';
 import { fitCell, formatBoolTag, sanitizePrintable, shortId } from './table-format';
@@ -120,6 +121,15 @@ export interface CopilotSceneState {
   provider?: string;
   model?: string;
   logs: string[];
+}
+
+export interface NetworkSceneState {
+  devices: DiscoveredDevice[];
+  selectedIndex: number;
+  searchText: string;
+  scanMode: string;
+  scanning: boolean;
+  durationMs?: number;
 }
 
 export interface SetupSceneState {
@@ -455,6 +465,59 @@ export function sceneFromCopilotState(state: CopilotSceneState): ScenePanel[] {
         lines: state.logs.length
           ? state.logs
           : ['Use interactive mode to run prompts. In headless mode, this view is a snapshot of current copilot log state.']
+      }
+    }
+  ];
+}
+
+export function sceneFromNetworkState(state: NetworkSceneState): ScenePanel[] {
+  const selectedIndex = clampSelection(state.selectedIndex, state.devices.length);
+  const selected = state.devices[selectedIndex];
+  const detailLines = selected
+    ? [
+        `IP: ${selected.ip}`,
+        `MAC: ${selected.mac ?? 'n/a'}`,
+        `Hostname: ${selected.hostname ?? 'n/a'}`,
+        `Manufacturer: ${selected.manufacturer ?? 'n/a'}`,
+        `Model: ${selected.model ?? 'n/a'}`,
+        `Category: ${selected.category}`,
+        `Confidence: ${selected.confidence}`,
+        `Sources: ${selected.sources.join(', ')}`,
+        `Services: ${selected.services.length > 0 ? selected.services.map((s) => `${s.serviceType}${s.port ? ':' + s.port : ''}`).join(', ') : 'none'}`,
+        `Open Ports: ${selected.openPorts.length > 0 ? selected.openPorts.join(', ') : 'none'}`
+      ]
+    : state.scanning
+      ? ['Scanning...']
+      : ["No devices. Press 'n' for quick scan or 'f' for full scan."];
+
+  const statusParts: string[] = [];
+  if (state.scanMode) statusParts.push(`mode=${state.scanMode}`);
+  if (state.scanning) statusParts.push('scanning');
+  if (state.durationMs !== undefined) statusParts.push(`${(state.durationMs / 1000).toFixed(1)}s`);
+  if (state.searchText) statusParts.push(`filter=${state.searchText}`);
+
+  return [
+    {
+      id: 'network-table',
+      title: 'Network Devices',
+      kind: 'table',
+      table: {
+        columns: ['IP', 'Name', 'Category', 'Manufacturer'],
+        rows: state.devices.map((d) => [
+          d.ip,
+          fitCell(d.name ?? '—', 24, 'end'),
+          fitCell(d.category, 14, 'end'),
+          fitCell(d.manufacturer ?? '—', 20, 'end')
+        ])
+      },
+      status: statusParts.join(' ') || 'idle'
+    },
+    {
+      id: 'network-detail',
+      title: 'Device Detail',
+      kind: 'text',
+      text: {
+        lines: detailLines
       }
     }
   ];
