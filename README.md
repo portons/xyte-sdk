@@ -2,6 +2,8 @@
 
 Production-focused TypeScript SDK + CLI + full-screen TUI for Xyte public APIs, with multi-tenant profiles, named API-key slots, setup gating, and headless visual parity for agents.
 
+> All examples and screenshots in this README are synthetic demo data (no production tenant data).
+
 ## Features
 
 - Full public endpoint catalog synced from `../server/docs/api/Xyte Public/...`
@@ -25,6 +27,71 @@ Production-focused TypeScript SDK + CLI + full-screen TUI for Xyte public APIs, 
 - Deterministic fleet analytics + report generation (`inspect`/`report`)
 - MCP stdio server for tool-based agents (`xyte mcp serve`)
 - Pluggable LLM providers (OpenAI, Anthropic, OpenAI-compatible)
+
+## Landing Page
+
+- Project landing page: `docs/index.html`
+- Open locally in browser:
+
+```bash
+open docs/index.html
+```
+
+## Visual Tour (Synthetic)
+
+TUI dashboard (synthetic):
+
+![XYTE TUI dashboard synthetic screenshot](docs/media/tui-dashboard-synthetic.png)
+
+Headless runtime frame (synthetic):
+
+![XYTE headless JSON synthetic screenshot](docs/media/headless-frame-synthetic.png)
+
+## End-to-End Usage (Install -> Run -> Operate)
+
+1. Install dependencies and build:
+
+```bash
+npm install
+npm run build
+```
+
+2. Run first-time onboarding (interactive):
+
+```bash
+xyte
+```
+
+This prompts for:
+- XYTE API key
+- optional tenant label (default `default`)
+
+3. Verify readiness and connectivity:
+
+```bash
+xyte setup status --tenant acme-demo --format json
+xyte config doctor --tenant acme-demo --format json
+```
+
+4. Inspect fleet and generate report:
+
+```bash
+xyte inspect fleet --tenant acme-demo --format json
+xyte inspect deep-dive --tenant acme-demo --window 24 --format json > /tmp/deep-dive.json
+xyte report generate --tenant acme-demo --input /tmp/deep-dive.json --out /tmp/xyte-findings.pdf
+```
+
+5. Run headless mode for agent loops:
+
+```bash
+xyte tui --headless --screen dashboard --format json --once --tenant acme-demo
+```
+
+6. Start MCP server for tool-use clients:
+
+```bash
+xyte mcp serve
+```
 
 ## Requirements
 

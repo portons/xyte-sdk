@@ -1,93 +1,93 @@
 ---
 name: xyte
-description: Use when the user needs to operate Xyte through the @xyte/sdk CLI or headless TUI frames (setup, tenants, key slots, endpoint calls, incidents/tickets/devices/spaces) with deterministic commands and guarded mutations.
+description: Use for @xyte/sdk operations: first-run setup, tenant/key auth, guarded endpoint calls, inspect/report generation, JSON-only headless TUI snapshots, and MCP tool serving with schema-validated outputs.
 ---
 
-# XYTE (CLI + Headless)
+# XYTE Skill Router (One-Stop, Agent-Native)
 
-Use this skill when tasks involve Xyte operations via `xyte` commands or `xyte tui --headless` output. Prefer deterministic CLI/headless flows over interactive TUI actions.
+Last updated: 2026-02-08
 
-## Trigger Conditions
+This skill is the entrypoint for deterministic Xyte operations via `xyte`. It is optimized for low-context agent routing: short policies, exact commands, and references/scripts for deeper procedures.
 
-Apply this skill when user intent includes any of:
-- setup/readiness checks for Xyte access
+## Purpose and Trigger Conditions
+
+Use when the request involves any of:
+- setup/readiness for Xyte access
 - tenant/key-slot management
-- endpoint discovery and API calls
-- fleet inspection via devices/incidents/tickets/spaces
-- agent-safe JSON frame consumption from headless mode
-- fleet insights, deep-dive analytics, or report generation for operations reviews
-- MCP tool server usage for external agent orchestration
+- endpoint discovery or endpoint invocation
+- fleet inspection/deep-dive/reporting
+- headless TUI JSON frame consumption
+- MCP tool bridge for external agents
+
+## Non-Goals
+
+- Do not use this skill for arbitrary product strategy or generic markdown authoring.
+- Do not perform writes by default.
+- Do not use headless text output; headless is JSON-only.
+
+## Mandatory Safety Rules
+
+- Default to read-only.
+- Require explicit user intent before writes.
+- Non-read endpoint calls must include `--allow-write`.
+- Destructive endpoint calls must include `--confirm <endpoint-key>`.
+- In automation, always pass `--tenant <tenant-id>`.
+- Treat copilot output as advisory only.
 
 ## Deterministic Execution Order
 
-1. First-run onboarding (preferred)
-- `xyte` (TTY wizard: asks XYTE API key + optional tenant label, then opens dashboard)
-- non-interactive: `xyte setup run --non-interactive --tenant <tenant-id> --key <value>`
-
-2. Install diagnostics
+1. Setup/readiness:
 - `xyte doctor install --format json`
+- `xyte setup status --tenant <tenant-id> --format json`
+- `xyte config doctor --tenant <tenant-id> --format json`
 
-3. Readiness/setup checks
-- `xyte setup status --format json [--tenant <tenant-id>]`
-- `xyte config doctor --format json [--tenant <tenant-id>]`
-
-4. Tenant + key-slot auth
-- `xyte tenant add <tenant-id> --name "<name>"`
+2. Auth/tenant (if missing/incomplete):
+- `xyte setup run --non-interactive --tenant <tenant-id> --key <value>`
 - `xyte tenant use <tenant-id>`
-- `xyte auth key add --tenant <tenant-id> --provider xyte-org --name primary --key <value> --set-active`
 - `xyte auth key list --tenant <tenant-id> --format json`
 
-5. Endpoint discovery
-- `xyte list-endpoints`
+3. Endpoint operations:
+- `xyte list-endpoints --tenant <tenant-id>`
 - `xyte describe-endpoint <endpoint-key>`
-
-6. Guarded invocation
 - `xyte call <endpoint-key> --tenant <tenant-id> ...`
-- add `--allow-write` for non-read endpoints
-- add `--confirm <endpoint-key>` for destructive endpoints (`DELETE`)
 
-7. Headless verification
-- run one-shot headless snapshots and verify `meta` contract fields before automation loops
+4. Insights/reports:
+- `xyte inspect fleet --tenant <tenant-id> --format json`
+- `xyte inspect deep-dive --tenant <tenant-id> --window <hours> --format json`
+- `xyte report generate --tenant <tenant-id> --input <deep-dive.json> --out <report.pdf>`
 
-8. Inspect + reporting
-- `xyte inspect fleet --tenant <tenant-id> --format json|ascii`
-- `xyte inspect deep-dive --tenant <tenant-id> --window 24 --format json|ascii|markdown`
-- `xyte report generate --tenant <tenant-id> --input <deep-dive.json> --out <path> [--format pdf|markdown]`
-
-9. MCP server (agent tool bridge)
+5. Headless and MCP:
+- `xyte tui --headless --screen <screen> --format json --once --tenant <tenant-id>`
 - `xyte mcp serve`
 
-## Safety Policy (Mandatory)
+## Workflow Selector
 
-- Default to read-only.
-- Never run write endpoints unless user explicitly requested mutation.
-- Always include write guards in examples:
-  - non-read: `--allow-write`
-  - delete: `--confirm <endpoint-key>`
-- Treat copilot output as advisory only.
+| Intent | Primary command/script |
+| --- | --- |
+| First-time onboarding (interactive) | `xyte` |
+| Setup non-interactive | `xyte setup run --non-interactive --tenant <tenant-id> --key <value>` |
+| Readiness snapshot | `xyte setup status --tenant <tenant-id> --format json` |
+| Connectivity diagnostics | `xyte config doctor --tenant <tenant-id> --format json` |
+| Read endpoint call + envelope | `xyte call <endpoint-key> --tenant <tenant-id> --output-mode envelope --strict-json` |
+| Guarded write endpoint call | `xyte call <endpoint-key> --tenant <tenant-id> --allow-write ...` |
+| Guarded delete endpoint call | `xyte call <endpoint-key> --tenant <tenant-id> --allow-write --confirm <endpoint-key> ...` |
+| Fleet summary | `xyte inspect fleet --tenant <tenant-id> --format json` |
+| Deep-dive analytics | `xyte inspect deep-dive --tenant <tenant-id> --window <hours> --format json` |
+| PDF report generation | `xyte report generate --tenant <tenant-id> --input <deep-dive.json> --out <path>.pdf` |
+| Headless snapshot (JSON NDJSON) | `xyte tui --headless --screen <screen> --format json --once --tenant <tenant-id>` |
+| Continuous headless monitoring | `xyte tui --headless --screen <screen> --format json --follow --interval-ms <ms> --tenant <tenant-id>` |
+| MCP tool bridge | `xyte mcp serve` |
+| Contract smoke validation | `skills/xyte/scripts/validate_agent_contracts.sh <tenant-id>` |
+| Headless contract validation | `skills/xyte/scripts/check_headless.sh <tenant-id>` |
 
-## Determinism Rules for Agents
+## Minimal Command Recipes
 
-- Always pass `--tenant <tenant-id>` in automation.
-- Use `--format json` for machine steps and parse fields directly.
-- Prefer `xyte call --output-mode envelope` for agent loops that need request/guard/retry metadata.
-- Headless mode is JSON-only; always pass `--format json`.
-- Prefer one-shot headless (`--once`) for checks; use `--follow` only when continuous monitoring is required.
-- For blocked operational screens in headless mode, expect redirect to `setup` with `meta.redirectedFrom`.
-
-## Core Command Recipes
-
-Readiness snapshot:
+Read call:
 ```bash
-xyte setup status --tenant <tenant-id> --format json
+xyte call organization.devices.getDevices --tenant <tenant-id> --output-mode envelope --strict-json
 ```
 
-Endpoint invocation (read):
-```bash
-xyte call organization.devices.getDevices --tenant <tenant-id> --output-mode envelope
-```
-
-Endpoint invocation (write):
+Write call (guarded):
 ```bash
 xyte call organization.commands.sendCommand \
   --tenant <tenant-id> \
@@ -96,7 +96,7 @@ xyte call organization.commands.sendCommand \
   --body-json '{"name":"reboot"}'
 ```
 
-Endpoint invocation (delete):
+Delete call (guarded):
 ```bash
 xyte call organization.commands.cancelCommand \
   --tenant <tenant-id> \
@@ -105,79 +105,96 @@ xyte call organization.commands.cancelCommand \
   --path-json '{"device_id":"<device-id>","command_id":"<command-id>"}'
 ```
 
-Headless one-shot (JSON only):
+Headless:
 ```bash
-xyte tui --headless --screen setup --format json --once --tenant <tenant-id>
+xyte tui --headless --screen dashboard --format json --once --tenant <tenant-id>
 ```
 
-Fleet summary:
+Inspect + report:
 ```bash
-xyte inspect fleet --tenant <tenant-id> --format json
+xyte inspect deep-dive --tenant <tenant-id> --window 24 --format json > /tmp/deep-dive.json
+xyte report generate --tenant <tenant-id> --input /tmp/deep-dive.json --out /tmp/xyte-findings.pdf
 ```
 
-Deep dive:
+## Contract IDs and Schemas
+
+Schema/version IDs:
+- call envelope: `xyte.call.envelope.v1`
+- headless frame: `xyte.headless.frame.v1`
+- inspect fleet: `xyte.inspect.fleet.v1`
+- inspect deep dive: `xyte.inspect.deep-dive.v1`
+- report metadata: `xyte.report.v1`
+
+Canonical schemas:
+- `/Users/porton/Projects/xyte-sdk/docs/schemas/call-envelope.v1.schema.json`
+- `/Users/porton/Projects/xyte-sdk/docs/schemas/headless-frame.v1.schema.json`
+- `/Users/porton/Projects/xyte-sdk/docs/schemas/inspect-fleet.v1.schema.json`
+- `/Users/porton/Projects/xyte-sdk/docs/schemas/inspect-deep-dive.v1.schema.json`
+- `/Users/porton/Projects/xyte-sdk/docs/schemas/report.v1.schema.json`
+
+## MCP Tool Surface (Current)
+
+Current tool names:
+- `xyte_setup_status`
+- `xyte_config_doctor`
+- `xyte_list_endpoints`
+- `xyte_describe_endpoint`
+- `xyte_call`
+- `xyte_inspect_fleet`
+- `xyte_report_generate`
+
+Guard semantics in MCP mirror CLI:
+- write endpoints require `allow_write: true`
+- destructive endpoints require matching `confirm`
+
+## Validation Commands
+
+Run full contract checks:
 ```bash
-xyte inspect deep-dive --tenant <tenant-id> --window 24 --format markdown
+skills/xyte/scripts/validate_agent_contracts.sh <tenant-id>
 ```
 
-Report generation:
+Validate headless frames only:
 ```bash
-xyte report generate \
-  --tenant <tenant-id> \
-  --input /tmp/deep-dive.json \
-  --out /tmp/xyte-findings.pdf \
-  --format pdf
+skills/xyte/scripts/check_headless.sh <tenant-id>
 ```
 
-MCP server:
+Validate any payload against schema:
 ```bash
-xyte mcp serve
+node skills/xyte/scripts/validate_with_schema.js <schema.json> <data.json>
 ```
 
-## Persona Playbooks
+## Troubleshooting Entrypoints
 
-### MSP Daily Fleet Check
-1. `xyte setup status --tenant <tenant-id> --format json`
-2. `xyte inspect fleet --tenant <tenant-id> --format ascii`
-3. `xyte inspect deep-dive --tenant <tenant-id> --window 24 --format json > /tmp/deep-dive.json`
-4. `xyte report generate --tenant <tenant-id> --input /tmp/deep-dive.json --out /tmp/msp-daily.md --format markdown`
-
-Acceptance checks:
-- Fleet output includes `schemaVersion = xyte.inspect.fleet.v1`
-- Deep-dive output includes `schemaVersion = xyte.inspect.deep-dive.v1`
-- Report output includes `schemaVersion = xyte.report.v1`
-
-### Manufacturer Incident Concentration
-1. `xyte inspect deep-dive --tenant <tenant-id> --window 72 --format json`
-2. Review `topIncidentDevices`, `churn24h.byDevice`, `dataQuality.statusMismatches`
-3. For risky devices, use guarded command preview:
-   - `xyte describe-endpoint organization.commands.sendCommand`
-   - `xyte call organization.commands.sendCommand --tenant <tenant-id> --allow-write --path-json '{"device_id":"<id>"}' --body-json '{"name":"reboot"}' --output-mode envelope`
-
-Acceptance checks:
-- Non-read calls include `--allow-write`
-- Envelope output captures `guard`, `response.retryCount`, and any `error`
-
-### Service Desk Triage
-1. `xyte inspect deep-dive --tenant <tenant-id> --window 24 --format markdown`
-2. Correlate `ticketPosture.oldestOpenTickets` with `activeIncidentAging`
-3. Generate sanitized report:
-   - `xyte report generate --tenant <tenant-id> --input /tmp/deep-dive.json --out /tmp/helpdesk-summary.pdf --format pdf`
-
-Acceptance checks:
-- Default report masks raw IDs unless `--include-sensitive` is passed
-- Report generation returns `schemaVersion = xyte.report.v1`
+- First-run/setup issues:
+  - `xyte`
+  - `xyte setup run --non-interactive --tenant <tenant-id> --key <value>`
+- Readiness/connectivity:
+  - `xyte setup status --tenant <tenant-id> --format json`
+  - `xyte config doctor --tenant <tenant-id> --format json`
+- TUI crash diagnostics:
+```bash
+XYTE_TUI_DEBUG=1 XYTE_TUI_DEBUG_LOG=/tmp/xyte-tui-debug.log xyte tui --tenant <tenant-id>
+```
+- Headless errors:
+  - ensure `--headless --format json` (no text format in headless)
+  - parse NDJSON and use the last runtime frame (`meta.startup != true`)
 
 ## Utility Scripts
 
-- CLI launcher: `scripts/run_xyte_cli.sh`
-- endpoint query/filter report: `scripts/endpoint_filters_report.sh`
-- headless smoke validation: `scripts/check_headless.sh`
-- full contract validation: `scripts/validate_agent_contracts.sh <tenant-id>`
-- JSON schema validator helper: `scripts/validate_with_schema.js <schema.json> <data.json>`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/scripts/run_xyte_cli.sh`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/scripts/check_headless.sh`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/scripts/validate_agent_contracts.sh`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/scripts/validate_with_schema.js`
 
 ## References (Load As Needed)
 
-- Endpoint + filter/pagination guide: `references/endpoints.md`
-- Headless flow recipes + branching: `references/tui-flows.md`
-- Headless JSON contract + rendering metadata: `references/headless-contract.md`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/references/endpoints.md`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/references/tui-flows.md`
+- `/Users/porton/Projects/xyte-sdk/skills/xyte/references/headless-contract.md`
+
+## Notes for Agents
+
+- Keep this file short in-context; use references for deep procedures.
+- Prefer scripts over ad hoc manual validation flows.
+- Keep tenant explicit in automation (`--tenant <tenant-id>`).

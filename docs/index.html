@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XYTE SDK - CLI, TUI, Headless, MCP</title>
+    <style>
+      :root {
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --ink: #0f172a;
+        --muted: #475569;
+        --brand: #1459a6;
+        --line: #d7e2f0;
+        --code-bg: #0b1220;
+        --code-ink: #dbeafe;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "SF Pro Text", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+        color: var(--ink);
+        background: radial-gradient(circle at 0 0, #eaf2ff 0, var(--bg) 45%);
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 28px 20px 56px;
+      }
+      .hero {
+        background: linear-gradient(145deg, #ffffff, #eef4ff);
+        border: 1px solid #c8d9f2;
+        border-radius: 14px;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 34px;
+        letter-spacing: 0.3px;
+      }
+      .sub {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+      .badge {
+        display: inline-block;
+        margin-top: 14px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid #b9d0f3;
+        background: #eaf2ff;
+        color: #0f3f79;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 14px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.45;
+      }
+      .section {
+        margin-top: 24px;
+      }
+      .section h2 {
+        margin: 0 0 10px;
+        font-size: 23px;
+      }
+      pre {
+        margin: 0;
+        overflow: auto;
+        white-space: pre;
+        background: var(--code-bg);
+        color: var(--code-ink);
+        border-radius: 10px;
+        border: 1px solid #1f2a3f;
+        padding: 12px;
+        font: 13px/1.45 Menlo, Monaco, Consolas, monospace;
+      }
+      .shots {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .shot {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .shot img {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #d7dee9;
+      }
+      .shot figcaption {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .links {
+        margin-top: 18px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .links a {
+        text-decoration: none;
+        color: #0f3f79;
+        background: #eaf2ff;
+        border: 1px solid #b9d0f3;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 13px;
+      }
+      @media (max-width: 900px) {
+        .grid, .shots { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="hero">
+        <h1>XYTE SDK</h1>
+        <p class="sub">Deterministic CLI + TUI + Headless + MCP utilities for Xyte fleet operations.</p>
+        <span class="badge">Synthetic examples only (no real tenant data)</span>
+        <div class="links">
+          <a href="../README.md">README</a>
+          <a href="./headless-visuals.md">Headless Visuals</a>
+          <a href="./setup.md">Setup Guide</a>
+          <a href="./schemas/">Schemas</a>
+        </div>
+      </section>
+
+      <section class="section grid">
+        <article class="card">
+          <h3>Quick Start</h3>
+          <p>Run <code>xyte</code>, paste your API key, then access your dashboard. For automation, pass <code>--tenant</code> and use JSON outputs.</p>
+        </article>
+        <article class="card">
+          <h3>Safety by Default</h3>
+          <p>Read-only by default. Non-read endpoint calls require <code>--allow-write</code>. Destructive calls require <code>--confirm &lt;endpoint-key&gt;</code>.</p>
+        </article>
+        <article class="card">
+          <h3>Headless for Agents</h3>
+          <p>Use <code>xyte tui --headless --format json</code> and parse NDJSON runtime frames with contract <code>xyte.headless.frame.v1</code>.</p>
+        </article>
+        <article class="card">
+          <h3>Reporting</h3>
+          <p>Generate branded PDF findings with <code>xyte report generate</code>. Default output is redacted unless <code>--include-sensitive</code> is used.</p>
+        </article>
+      </section>
+
+      <section class="section">
+        <h2>End-to-End Command Flow</h2>
+        <pre>npm install
+npm run build
+xyte
+xyte setup status --tenant acme-demo --format json
+xyte inspect deep-dive --tenant acme-demo --window 24 --format json > /tmp/deep-dive.json
+xyte report generate --tenant acme-demo --input /tmp/deep-dive.json --out /tmp/xyte-findings.pdf
+xyte tui --headless --screen dashboard --format json --once --tenant acme-demo
+xyte mcp serve</pre>
+      </section>
+
+      <section class="section">
+        <h2>Screenshots (Synthetic)</h2>
+        <div class="shots">
+          <figure class="shot">
+            <img src="./media/tui-dashboard-synthetic.png" alt="Synthetic XYTE TUI dashboard screenshot" />
+            <figcaption>TUI dashboard view with synthetic KPIs and incident/ticket panels.</figcaption>
+          </figure>
+          <figure class="shot">
+            <img src="./media/headless-frame-synthetic.png" alt="Synthetic XYTE headless JSON frame screenshot" />
+            <figcaption>Headless runtime frame example (<code>xyte.headless.frame.v1</code>) with synthetic data.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Synthetic JSON Example</h2>
+        <pre>{
+  "schemaVersion": "xyte.call.envelope.v1",
+  "requestId": "req_demo_123",
+  "tenantId": "acme-demo",
+  "endpointKey": "organization.devices.getDevices",
+  "method": "GET",
+  "guard": { "allowWrite": false },
+  "response": { "status": 200, "durationMs": 184, "retryCount": 0, "data": { "items": [] } }
+}</pre>
+      </section>
+    </main>
+  </body>
+</html>
