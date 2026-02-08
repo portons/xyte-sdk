@@ -743,6 +743,13 @@ export async function runTuiApp(options: TuiAppOptions): Promise<void> {
         const dispatchResult = await dispatchKeypress({
           ch: event.ch,
           key: event.key,
+          shouldBypassHorizontalGlobal: () =>
+            mounted?.id === 'copilot' &&
+            mounted?.getActivePane?.() === 'prompt-input' &&
+            (event.key.name === 'left' || event.key.name === 'right') &&
+            !event.key.ctrl &&
+            !event.key.meta &&
+            !event.key.shift,
           isModalActive: modalActive,
           handleArrow: activeMounted?.handleArrow
             ? async (key) => {

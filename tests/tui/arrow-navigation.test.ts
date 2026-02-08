@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { cyclePane, moveTableSelection } from '../../src/tui/navigation';
+import { cyclePane, moveTableSelection, scrollBox } from '../../src/tui/navigation';
 import { SCREEN_PANE_CONFIG } from '../../src/tui/panes';
 
 describe('pane-focus arrow navigation', () => {
@@ -67,5 +67,9 @@ describe('pane-focus arrow navigation', () => {
     const copilotSource = readFileSync(join(root, 'src', 'tui', 'screens', 'copilot.ts'), 'utf8');
     const matches = copilotSource.match(/keys:\s*true/g) ?? [];
     expect(matches.length).toBe(1);
+  });
+
+  it('does not throw when scrolling non-scrollable box widgets', () => {
+    expect(() => scrollBox({} as any, 1)).not.toThrow();
   });
 });

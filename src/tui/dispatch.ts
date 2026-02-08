@@ -8,6 +8,7 @@ export interface KeyDispatchArgs {
   key: blessed.Widgets.Events.IKeyEventArg;
   handleScreen?: (ch: string | undefined, key: blessed.Widgets.Events.IKeyEventArg) => Promise<boolean>;
   handleArrow?: (key: TuiArrowKey) => Promise<TuiArrowHandleResult>;
+  shouldBypassHorizontalGlobal?: () => boolean;
   isModalActive?: boolean;
   handleModal?: (ch: string | undefined, key: blessed.Widgets.Events.IKeyEventArg) => Promise<boolean | void>;
   handleGlobal: (ch: string | undefined, key: blessed.Widgets.Events.IKeyEventArg) => Promise<void>;
@@ -26,6 +27,9 @@ export async function dispatchKeypress(args: KeyDispatchArgs): Promise<'screen' 
   if (keyName && ARROW_KEYS.includes(keyName)) {
     const horizontal = keyName === 'left' || keyName === 'right';
     const paneModeRequested = Boolean(args.key.ctrl || args.key.meta || args.key.shift);
+    if (horizontal && !paneModeRequested && args.shouldBypassHorizontalGlobal?.()) {
+      return 'blocked';
+    }
     if (horizontal && !paneModeRequested) {
       await args.handleGlobal(args.ch, args.key);
       return 'global';

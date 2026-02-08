@@ -146,7 +146,11 @@ export function scrollBox(box: blessed.Widgets.BoxElement | undefined, delta: nu
   if (!box || delta === 0) {
     return;
   }
-  box.scroll(delta);
+  const scroll = (box as unknown as { scroll?: (amount: number) => void }).scroll;
+  if (typeof scroll !== 'function') {
+    return;
+  }
+  scroll.call(box, delta);
 }
 
 export function clampIndex(index: number, totalRows: number): number {

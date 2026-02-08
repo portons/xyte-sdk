@@ -103,6 +103,23 @@ describe('tui key dispatch', () => {
     expect(handleGlobal).toHaveBeenCalledTimes(1);
   });
 
+  it('bypasses global horizontal arrow routing when screen requests text-edit priority', async () => {
+    const handleArrow = vi.fn().mockResolvedValue('handled');
+    const handleGlobal = vi.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchKeypress({
+      ch: undefined,
+      key: { name: 'left', full: 'left' } as any,
+      handleArrow,
+      handleGlobal,
+      shouldBypassHorizontalGlobal: () => true
+    });
+
+    expect(result).toBe('blocked');
+    expect(handleArrow).not.toHaveBeenCalled();
+    expect(handleGlobal).not.toHaveBeenCalled();
+  });
+
   it('falls through to global handler when pane-mode arrow reaches pane boundary', async () => {
     const handleArrow = vi.fn().mockResolvedValue('boundary');
     const handleGlobal = vi.fn().mockResolvedValue(undefined);
