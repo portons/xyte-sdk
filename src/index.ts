@@ -38,3 +38,6 @@ export { FileProfileStore } from './secure/profile-store';
 export { createKeychainStore, MemoryKeychain } from './secure/keychain';
 export type { ProfileStore } from './secure/profile-store';
 export type { SecretProvider, TenantProfile, ProfileStoreData, ApiKeySlotMeta, TenantKeyRegistry } from './types/profile';
+
+export { runDiscoveryScan } from './discovery/manager';
+export type { ScanOptions, ScanResult, DiscoveredDevice } from './discovery/types';

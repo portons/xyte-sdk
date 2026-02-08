@@ -1,6 +1,6 @@
 ---
 name: xyte
-description: Use for @xyte/sdk operations: first-run setup, tenant/key auth, guarded endpoint calls, inspect/report generation, JSON-only headless TUI snapshots, and MCP tool serving with schema-validated outputs.
+description: "Use for @xyte/sdk operations: first-run setup, tenant/key auth, guarded endpoint calls, inspect/report generation, JSON-only headless TUI snapshots, and MCP tool serving with schema-validated outputs."
 ---
 
 # XYTE Skill Router (One-Stop, Agent-Native)
